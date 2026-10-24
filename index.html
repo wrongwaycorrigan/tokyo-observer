@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tokyo Observer</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --panel: #0e3735;
+      --panel-hi: #1f514b;
+      --dither: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2' shape-rendering='crispEdges'%3E%3Crect width='1' height='1' fill='%230e3735'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%230e3735'/%3E%3C/svg%3E") 0 0 / 2px 2px repeat;
+      --edge: #64b8a4;
+      --text: #f0e6d5;
+      --muted: #5bab99;
+      --accent: #f3d572;
+      --menubar: #5bab99;
+      --ink: #052a2a;
+      --hotkey: #82266d;
+      --status: #306b61;
+      --select: #6ae8f1;
+      --button: #b5ad9f;
+      --link: #63dae3;
+      --shadow: #000000;
+      --label-air: #6ae8f1;
+      --label-sea: #7ddfc5;
+      --label-port: #f2a984;
+      --label-sonde: #aad8ff;
+      --label-radio: #f158be;
+      --label-tower: #dad3e6;
+      --label-wspr: #b98af0;
+      --label-quake: #ff5ec8;
+      --label-iss: #ffe27a;
+      --label-airport: #fff4e2;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); }
+    body {
+      font-family: 'DotGothic16', monospace;
+      font-size: 16px;
+      line-height: 18px;
+      color: var(--text);
+      -webkit-font-smoothing: none;
+      font-smooth: never;
+    }
+
+    #viewport { position: fixed; inset: 0; }
+    #viewport canvas { display: block; }
+    #cut { position: fixed; inset: 0; background: #000000; opacity: 0; pointer-events: none; z-index: 5; transition: opacity 1.6s ease-in-out; }
+    #cut.dark { opacity: 1; }
+    .label-layer { position: absolute; inset: 0; pointer-events: none; }
+
+    .map-label {
+      font-family: 'DotGothic16', monospace;
+      font-size: 16px;
+      white-space: nowrap;
+      color: var(--text);
+      text-shadow: 1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000;
+      transform: translateY(-12px);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .label-air { color: var(--label-air); }
+    .label-sea { color: var(--label-sea); }
+    .label-port { color: var(--label-port); }
+    .label-sonde { color: var(--label-sonde); }
+    .label-radio { color: var(--label-radio); }
+    .label-tower { color: var(--label-tower); }
+    .label-wspr { color: var(--label-wspr); }
+    .label-quake { color: var(--label-quake); }
+    .label-iss { color: var(--label-iss); }
+    .label-feed { color: var(--select); }
+    .label-airport { color: var(--label-airport); }
+    .label-aqi, .aqi-good { color: #7ddfc5; }
+    .aqi-moderate { color: var(--accent); }
+    .aqi-sensitive { color: var(--label-port); }
+    .aqi-bad { color: var(--label-quake); }
+    .map-label:hover { background: var(--panel); }
+
+    #menubar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 20px;
+      background: var(--menubar);
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0 8px;
+      z-index: 20;
+      white-space: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    #menubar button.title { padding: 2px 8px; margin-right: 8px; }
+    #menu-connect { margin-left: auto; }
+    #connect-dot { color: var(--accent); }
+    #connect-dot.ok { color: #7ddfc5; }
+    #connect-dot.warn { color: var(--accent); }
+    #connect-dot.bad { color: var(--label-quake); }
+    #menu-connect:not(:hover) #connect-dot.ok { color: var(--ink); }
+    #connect-dot { font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif; font-size: 16px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    #menubar button {
+      font: inherit;
+      background: none;
+      border: 0;
+      color: inherit;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    #menubar button .hk { color: var(--hotkey); }
+    #menubar button.active { background: var(--panel); color: var(--text); }
+    #menubar button.active .hk { color: var(--accent); }
+    #menubar button:hover { background: var(--ink); color: var(--text); }
+    #menubar button:focus-visible { outline: 1px dotted var(--ink); }
+
+    #status {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      height: 20px;
+      padding-top: 2px;
+      background: var(--status);
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      z-index: 20;
+      display: flex;
+    }
+    #status-text { flex: 1; overflow: hidden; }
+    #sound-toggle { font: inherit; background: none; border: 0; border-left: 1px solid var(--muted); color: var(--text); padding: 0 10px; margin-top: -2px; cursor: pointer; }
+    #sound-toggle:hover { background: var(--ink); }
+    #sound-toggle.off { color: var(--muted); }
+    #sound-toggle.waiting { animation: sound-wait 1s steps(1) infinite; }
+    @keyframes sound-wait { 50% { color: var(--muted); } }
+
+    .window {
+      position: relative;
+      background: var(--dither);
+      color: var(--text);
+      border: 4px double var(--edge);
+      padding: 12px 12px 8px;
+      box-shadow: 8px 8px 0 var(--shadow);
+      text-shadow: 1px 0 0 var(--ink), 0 1px 0 var(--ink), 1px 1px 0 var(--ink);
+      image-rendering: pixelated;
+      min-width: 232px;
+    }
+    .window .wtitle {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--dither);
+      color: var(--accent);
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .window .count { color: var(--accent); }
+    .window ul { list-style: none; color: var(--muted); max-width: 300px; }
+    #quake-list li { white-space: pre; }
+    #quake-list li.quake-go { color: var(--text); cursor: pointer; }
+    #quake-list li.quake-go:hover { background: var(--select); color: var(--ink); }
+    .window li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hidden { display: none !important; }
+
+    #panels {
+      position: fixed;
+      top: 40px;
+      left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      z-index: 10;
+      max-height: calc(100% - 80px);
+      overflow: auto;
+      padding: 8px 12px 12px 0;
+      scrollbar-width: none;
+    }
+
+    #info {
+      position: fixed;
+      top: 48px;
+      right: 24px;
+      width: min(360px, calc(100% - 48px));
+      z-index: 15;
+    }
+    #info-body { color: var(--text); margin-top: 4px; }
+    #info-body a { color: var(--link); }
+    #info-body .atis { color: var(--select); }
+    #info-body .metar { color: var(--muted); }
+    #info-close, .close-x {
+      position: absolute;
+      top: -10px; right: 8px;
+      font: inherit;
+      background: var(--dither);
+      color: var(--text);
+      border: 0;
+      padding: 0 4px;
+      cursor: pointer;
+    }
+
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #000000;
+      color: #cccccc;
+      padding: 24px 32px;
+      z-index: 50;
+      font-family: 'DotGothic16', monospace;
+      font-size: 18px;
+      line-height: 24px;
+      overflow: hidden;
+      transition: opacity 0.6s steps(4);
+    }
+    #loading.done { opacity: 0; pointer-events: none; }
+    #loading .cursor { animation: blink 1s steps(1) infinite; color: #ffffff; }
+    .boot-line { white-space: pre; min-height: 24px; }
+    .boot-line.bright { color: #ffffff; }
+    .boot-line.ok { color: #6ae8f1; }
+    .boot-line.error { color: #ff5ec8; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    #panel-radio {
+      position: fixed;
+      right: 24px;
+      bottom: 40px;
+      width: 600px;
+      max-width: calc(100% - 48px);
+      z-index: 15;
+      background: #000000;
+      border-color: #6ae8f1;
+      font-family: 'DotGothic16', monospace;
+      font-size: 16px;
+      line-height: 18px;
+      color: #dddddd;
+      text-shadow: none;
+    }
+    #panel-radio .wtitle { background: #000000; color: #6ae8f1; }
+    .x68-head { display: flex; gap: 10px; white-space: pre; overflow: hidden; height: 17px; }
+    .x68-head .state { color: #888888; }
+    .x68-head .state.on { color: #6ae8f1; }
+    #radio-text { color: #ffffff; }
+    .radio-meta { color: #f3d572; white-space: pre; overflow: hidden; height: 17px; }
+    .x68-body { display: flex; gap: 12px; margin: 8px 0; }
+    .radio-list {
+      list-style: none;
+      flex: 1;
+      min-width: 0;
+      height: 144px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid #306b61;
+      scrollbar-width: thin;
+      scrollbar-color: #306b61 #000000;
+    }
+    .radio-list li { height: 18px; white-space: pre; overflow: hidden; cursor: pointer; color: #cccccc; padding: 0 4px; }
+    .radio-list li:hover { background: #164440; }
+    .radio-list li.sel { background: #6ae8f1; color: #000000; }
+    .radio-list li.playing::before { content: '\266a'; }
+    .radio-list li:not(.playing)::before { content: ' '; }
+    .x68-meter { border: 1px solid #306b61; padding: 2px 6px; width: 240px; flex: none; }
+    .x68-meter .cap { display: flex; justify-content: space-between; color: #5bab99; height: 17px; }
+    #radio-sim { color: #f2a984; }
+    #radio-spectrum { display: block; width: 228px; height: 96px; image-rendering: pixelated; }
+    .spec-legend { height: 0; position: relative; top: 2px; text-align: right; font-size: 12px; line-height: 12px; z-index: 1; }
+    .spec-legend .k-mid { color: #f3d572; }
+    .spec-legend .k-side { color: #5bab99; }
+    .spec-legend .k-peak { color: #ff5ec8; }
+    .spec-axis { display: flex; justify-content: space-between; color: #5bab99; height: 14px; line-height: 14px; font-size: 12px; }
+    .radio-controls, .radio-vol { display: flex; gap: 10px; flex-wrap: nowrap; align-items: center; height: 22px; }
+    .radio-vol { margin-top: 8px; }
+    #panel-radio .dosbtn { background: #222222; color: #dddddd; box-shadow: 3px 3px 0 #306b61; padding: 1px 7px; }
+    #panel-radio .dosbtn .hk { color: #f3d572; }
+    #panel-radio .dosbtn.lit { background: #6ae8f1; color: #000000; }
+    #panel-radio .dosbtn.lit .hk { color: #82266d; }
+    .x68-vol-bar { cursor: pointer; color: #6ae8f1; letter-spacing: 0; }
+    .x68-vol-bar .empty { color: #164440; }
+    .dosbtn {
+      font: inherit;
+      background: var(--button);
+      color: var(--ink);
+      border: 0;
+      padding: 1px 6px;
+      box-shadow: 4px 4px 0 var(--shadow);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .dosbtn .hk { color: var(--hotkey); }
+    .dosbtn:active { box-shadow: none; transform: translate(4px, 4px); }
+    .dosbtn.lit { background: var(--select); }
+    .dosbtn:focus-visible { outline: 1px dotted var(--accent); outline-offset: 2px; }
+
+    #sources {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 720px;
+      max-width: calc(100% - 32px);
+      max-height: calc(100% - 64px);
+      overflow: auto;
+      z-index: 30;
+      padding: 18px 16px 12px;
+    }
+    #sources, #sources .wtitle, #sources .close-x { background: var(--panel); }
+    #sources fieldset { border: 1px solid var(--edge); padding: 8px 10px 10px; margin: 0 0 14px; min-width: 0; }
+    #sources legend { color: var(--accent); padding: 0 6px; }
+    #sources table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    #sources col.c-state { width: 64px; }
+    #sources col.c-name { width: 200px; }
+    #sources col.c-detail { width: 150px; }
+    #sources td { padding: 0 8px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sources td.host, #sources td.detail { color: var(--muted); }
+    #sources .st-ok { color: #7ddfc5; }
+    #sources .st-err { color: var(--label-quake); }
+    #sources .st-wait { color: var(--accent); }
+    #sources .st-off { color: var(--muted); }
+    #sources .field { display: grid; grid-template-columns: 200px 1fr; gap: 10px; align-items: center; margin: 6px 0; }
+    #sources .field small { display: block; color: var(--muted); font-size: 13px; line-height: 15px; }
+    #sources input {
+      font: inherit;
+      background: var(--ink);
+      color: var(--text);
+      border: 1px solid var(--edge);
+      padding: 2px 6px;
+      width: 100%;
+      min-width: 0;
+    }
+    #sources input:focus { outline: 1px solid var(--select); }
+    #sources .feed-row, #sources .feed-head { display: grid; grid-template-columns: 150px 1fr 64px 34px; gap: 8px; margin: 6px 0; align-items: center; }
+    #sources .feed-head { color: var(--muted); margin-top: 8px; }
+    #sources .hint { color: var(--muted); }
+    #sources .feed-tools { margin-top: 8px; }
+    #sources .footer { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--edge); padding-top: 10px; }
+    #sources .footer .hint { flex: 1; }
+    #src-applied { color: #7ddfc5; }
+
+    @media (max-width: 640px) {
+      #panels { top: 32px; left: 8px; }
+      .window { min-width: 180px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div id="cut" aria-hidden="true"></div>
+
+  <nav id="menubar">
+    <button id="menu-home" class="title" title="Reset view to Tokyo Bay (H)">&#9776; TOKYO OBSERVER</button>
+    <button id="menu-air"><span class="hk">A</span>ir</button>
+    <button id="menu-sea"><span class="hk">S</span>ea</button>
+    <button id="menu-sonde">Radi<span class="hk">o</span>sonde</button>
+    <button id="menu-radio"><span class="hk">B</span>roadcast</button>
+    <button id="menu-quake"><span class="hk">Q</span>uake</button>
+    <button id="menu-connect" title="Settings and data sources (L)"><span id="connect-dot" aria-hidden="true">&#9881;&#65038;</span><span class="sr-only">Settings</span></button>
+  </nav>
+
+  <div id="panels">
+    <div id="panel-air" class="window hidden"><span class="wtitle" title="Air traffic">【航空交通】</span>AIRCRAFT <span class="count" id="count-air">0</span></div>
+    <div id="panel-sea" class="window hidden"><span class="wtitle" title="Tokyo Bay">【東京湾】</span>CONTACTS <span class="count" id="count-sea">0</span><br><span id="tide-status"></span><br><span id="ais-status"></span></div>
+    <div id="panel-sonde" class="window hidden"><span class="wtitle" title="Radiosondes">【高層観測】</span>BALLOONS <span class="count" id="count-sonde">0</span></div>
+    <div id="panel-wx" class="window"><span class="wtitle" title="Weather">【天気】</span><div id="wx-body">CONTACTING OPEN-METEO...</div><div id="wx-extra"></div></div>
+    <div id="panel-quake" class="window hidden"><span class="wtitle" title="Earthquakes">【地震】</span><ul id="quake-list"></ul>WITHIN 400KM, TIMES JST <span class="count" id="count-quake">0</span></div>
+  </div>
+
+  <div id="panel-radio" class="window hidden" role="region" aria-label="Broadcast">
+    <span class="wtitle">&#12304;&#9834; BROADCAST &#25918;&#36865;&#12305;</span>
+    <div class="x68-head"><span class="state" id="radio-state">&#9632; &#20572;&#27490;</span><span id="radio-text"></span></div>
+    <div class="radio-meta" id="radio-meta"> </div>
+    <div class="x68-body">
+      <ul class="radio-list" id="radio-list"></ul>
+      <div class="x68-meter">
+        <div class="cap"><span>SPECTRUM &#21608;&#27874;&#25968;</span><span id="radio-sim"></span></div>
+        <div class="spec-legend"><span class="k-mid">&#9632;MID</span> <span class="k-side">&#9632;SIDE</span> <span class="k-peak">&#9632;PEAK</span></div>
+        <canvas id="radio-spectrum" width="228" height="96" aria-hidden="true"></canvas>
+        <div class="spec-axis"><span>20</span><span>200</span><span>2k</span><span>20kHz</span></div>
+      </div>
+    </div>
+    <div class="radio-controls">
+      <button class="dosbtn" id="radio-power" title="Power (P)"><span class="hk">P</span> &#38651;&#28304;</button>
+      <button class="dosbtn" id="radio-prev" title="Previous station (&lt;)">&#9668;</button>
+      <button class="dosbtn" id="radio-next" title="Next station (&gt;)">&#9658;</button>
+      <button class="dosbtn" id="radio-scan" title="Auto-scan every 10 seconds (N)"><span class="hk">N</span> &#36208;&#26619;</button>
+      <button class="dosbtn" id="radio-band" title="ALL: every Japanese station. LOCAL: only stations located around Tokyo">&#20840;&#22269; ALL</button>
+      <button class="dosbtn" id="radio-goto" title="Fly the camera to this station">&#31227;&#21205; GO TO</button>
+    </div>
+    <div class="radio-vol">
+      &#38899;&#37327; <button class="dosbtn" id="radio-voldown" aria-label="Volume down">-</button><span class="x68-vol-bar" id="radio-volbar" title="Click to set volume"></span><button class="dosbtn" id="radio-volup" aria-label="Volume up">+</button>
+      <button class="dosbtn" id="radio-mute">&#28040;&#38899; MUTE</button>
+    </div>
+  </div>
+
+  <div id="sources" class="window hidden" role="dialog" aria-label="Settings">
+    <span class="wtitle">&#12304;SETTINGS &#35373;&#23450;&#12305;</span>
+    <button id="sources-close" class="close-x" title="Close (Esc)">[&#9632;]</button>
+    <fieldset>
+      <legend>STATUS</legend>
+      <table><colgroup><col class="c-state"><col class="c-name"><col><col class="c-detail"></colgroup><tbody id="sources-table"></tbody></table>
+    </fieldset>
+    <fieldset>
+      <legend>CONNECT</legend>
+      <label class="field" for="src-adsb"><span>AIRCRAFT<small>tar1090 / readsb aircraft.json</small></span>
+        <input id="src-adsb" type="url" spellcheck="false" placeholder="http://receiver/tar1090/data/aircraft.json">
+      </label>
+      <label class="field" for="src-ais"><span>SHIPS<small>aisstream.io API key</small></span>
+        <input id="src-ais" type="password" spellcheck="false" autocomplete="off" placeholder="paste key">
+      </label>
+    </fieldset>
+    <fieldset>
+      <legend>CUSTOM FEEDS</legend>
+      <div class="hint">GeoJSON points or a JSON list with lat/lon. The site must allow browser access (CORS).</div>
+      <div class="feed-head"><span>NAME</span><span>URL</span><span>SEC</span><span></span></div>
+      <div id="src-feeds"></div>
+      <div class="feed-tools"><button class="dosbtn" id="src-add">+ <span class="hk">A</span>dd feed</button></div>
+    </fieldset>
+    <div class="footer">
+      <span class="hint" id="src-note">Stored in this browser only.</span>
+      <button class="dosbtn" id="src-apply">A<span class="hk">p</span>ply</button>
+      <button class="dosbtn" id="src-save"><span class="hk">S</span>ave</button>
+      <button class="dosbtn" id="src-cancel">Close</button>
+    </div>
+  </div>
+
+  <div id="info" class="window hidden">
+    <span class="wtitle" id="info-title"></span>
+    <button id="info-close" title="Close (Esc)">[&#9632;]</button>
+    <div id="info-body"></div>
+  </div>
+
+  <div id="status"><span id="status-text"> LOADING...</span><button id="sound-toggle" type="button">&#9834; AMBIENCE</button></div>
+
+  <div id="loading" aria-live="polite">
+    <div id="boot"></div><span class="cursor">_</span>
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+import * as THREE from 'three';
+import { toLocal } from '../world/geo.js';
+import { createModel } from '../world/models.js';
+import { keepVisible, makeLabel, setInfo } from '../world/markers.js';
+import { SHARED } from '../world/shading.js';
+
+// Atmospheric selection of lighthouse sites around Tokyo Bay and its approaches.
+// Coordinates are WGS84 decimal degrees (longitude, latitude).
+// Published characteristics are recorded where available; rendering details
+// and flash durations are approximations where official sources do not specify them.
+const SITES = [
+  {
+    id: 'kannonzaki',
+    name: 'Kannonzaki Lighthouse',
+    label: 'KANNONZAKI',
+    lon: 139.74528,
+    lat: 35.25611,
+    lampHeight: 17.2,
+    range: 19,
+    description:
+      "Japan's first Western-style lighthouse at the Uraga Channel entrance to Tokyo Bay.",
+    light: 'Fl(2) W 15s — two white flashes every 15 seconds',
+    rotationPeriod: 15,
+    flashPeriod: 15,
+    flashPattern: [
+      [0.00, 0.018, 0xffffff],
+      [0.075, 0.093, 0xffffff],
+    ],
+    phaseOffset: 0.1,
+    color: 0xffffff,
+    beamLength: 2600,
+    beamRadius: 85,
+    beamIntensity: 0.48,
+    dataSource: 'Japan Coast Guard / MLIT',
+  },
+  {
+    id: 'nojimazaki',
+    name: 'Nojimazaki Lighthouse',
+    label: 'NOJIMAZAKI',
+    lon: 139.88600,
+    lat: 34.90100,
+    lampHeight: 29,
+    range: 17,
+    description:
+      'Lighthouse at the southern tip of the Boso Peninsula, near the Pacific approach to Tokyo Bay.',
+    light: 'Fl W 15s — one white flash every 15 seconds',
+    rotationPeriod: 15,
+    flashPeriod: 15,
+    flashPattern: [[0.00, 0.018, 0xffffff]],
+    phaseOffset: 2.2,
+    color: 0xffffff,
+    beamLength: 3000,
+    beamRadius: 92,
+    beamIntensity: 0.46,
+    dataSource: 'Japan Coast Guard, Chiba Coast Guard Office',
+  },
+  {
+    id: 'sunosaki',
+    name: 'Sunosaki Lighthouse',
+    label: 'SUNOSAKI',
+    lon: 139.76200,
+    lat: 34.97600,
+    lampHeight: 45,
+    range: 18.5,
+    description:
+      'Lighthouse at the western tip of the Boso Peninsula, marking the Tokyo Bay and Pacific transition.',
+    light: 'Fl W/R 30s — alternating white and red flashes in a 30-second cycle',
+    rotationPeriod: 30,
+    flashPeriod: 30,
+    flashPattern: [
+      [0.00, 0.012, 0xffffff],
+      [0.50, 0.512, 0xff3030],
+    ],
+    phaseOffset: 4.4,
+    color: 0xffffff,
+    beamLength: 3200,
+    beamRadius: 94,
+    beamIntensity: 0.46,
+    dataSource: 'Japan Coast Guard, Chiba Coast Guard Office',
+  },
+  {
+    id: 'tsurugisaki',
+    name: 'Tsurugisaki Lighthouse',
+    label: 'TSURUGISAKI',
+    lon: 139.67650,
+    lat: 35.13600,
+    lampHeight: 17,
+    range: 12,
+    description:
+      'Lighthouse on the southeastern Miura Peninsula, near the Tokyo Bay entrance approaches.',
+    light: 'Fl(2) W/G 30s — published flash grouping and colors require verification',
+    rotationPeriod: 30,
+    flashPeriod: 30,
+    flashPattern: [
+      [0.00, 0.012, 0xffffff],
+      [0.055, 0.067, 0xffffff],
+      [0.11, 0.122, 0x35ff8a],
+    ],
+    phaseOffset: 1.7,
+    color: 0xffffff,
+    beamLength: 2500,
+    beamRadius: 78,
+    beamIntensity: 0.42,
+    dataSource: 'Japan Coast Guard; confirm exact published characteristic',
+  },
+  {
+    id: 'yokohama-north-breakwater',
+    name: 'Yokohama North Breakwater Lighthouse',
+    label: 'YOKOHAMA NORTH',
+    lon: 139.65833,
+    lat: 35.46000,
+    lampHeight: 15,
+    range: 4,
+    description:
+      'Historic red lighthouse on Yokohama North Breakwater in Yokohama Port.',
+    light: 'Iso R 4s — red light, two seconds on and two seconds off',
+    rotationPeriod: 4,
+    flashPeriod: 4,
+    flashPattern: [[0.00, 0.50, 0xff3030]],
+    phaseOffset: 0.0,
+    color: 0xff3030,
+    beamLength: 1100,
+    beamRadius: 45,
+    beamIntensity: 0.30,
+    dataSource: 'Japan Coast Guard, Yokohama Coast Guard Office',
+  },
+];
+
+const BEAM_VERTEX = /* glsl */ `
+  varying float vAlong;
+  varying float vEdge;
+
+  void main() {
+    vAlong = uv.y;
+    vEdge = abs(uv.x - 0.5) * 2.0;
+
+    gl_Position =
+      projectionMatrix *
+      modelViewMatrix *
+      vec4(position, 1.0);
+  }
+`;
+
+const BEAM_FRAGMENT = /* glsl */ `
+  uniform float uIntensity;
+  uniform vec3 uColor;
+
+  varying float vAlong;
+  varying float vEdge;
+
+  void main() {
+    float core = pow(max(0.0, 1.0 - vEdge), 2.0);
+    float alongFade =
+      pow(max(vAlong, 0.0), 1.35) *
+      (1.0 - vAlong * 0.30);
+
+    float a = uIntensity * alongFade * (0.12 + core * 0.88);
+
+    gl_FragColor = vec4(uColor, a);
+  }
+`;
+
+function glowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(
+    32, 32, 0,
+    32, 32, 32
+  );
+
+  gradient.addColorStop(0, 'rgba(255,255,245,1)');
+  gradient.addColorStop(0.20, 'rgba(255,239,200,0.72)');
+  gradient.addColorStop(0.55, 'rgba(255,205,150,0.20)');
+  gradient.addColorStop(1, 'rgba(255,180,130,0)');
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+
+  return texture;
+}
+
+function colorVector(hex) {
+  const color = new THREE.Color(hex);
+  return new THREE.Vector3(color.r, color.g, color.b);
+}
+
+// Flash pattern intervals use normalized cycle coordinates [0, 1].
+// Each entry is [start, end, colorHex].
+// Published cycle periods and flash groupings are represented where available.
+// Exact flash durations are approximations unless verified from official data.
+function patternState(site, time) {
+  const phase =
+    ((time + site.phaseOffset) % site.flashPeriod +
+      site.flashPeriod) %
+    site.flashPeriod;
+
+  const cycle = phase / site.flashPeriod;
+
+  for (const [start, end, color = site.color] of site.flashPattern) {
+    if (cycle >= start && cycle < end) {
+      return {
+        intensity: 1,
+        color,
+      };
+    }
+  }
+
+  return {
+    intensity: 0,
+    color: site.color,
+  };
+}
+
+function makeLighthouse(ctx, site, sharedGlowTexture) {
+  const position = toLocal(site.lon, site.lat);
+
+  const base = new THREE.Vector3(
+    position.x,
+    Math.max(ctx.terrain.heightAt(position.x, position.z), 2),
+    position.z
+  );
+
+  // Lighthouse structure
+  const model = new THREE.Group();
+  model.position.copy(base);
+  model.add(createModel('lighthouse'));
+
+  const house = createModel('keeperHouse');
+  house.position.set(9, 0, 6);
+  model.add(house);
+
+  keepVisible(model, 30, 24, 6, 2);
+
+  // Rotating light assembly
+  const lamp = new THREE.Group();
+
+  const beamMaterial = new THREE.ShaderMaterial({
+    vertexShader: BEAM_VERTEX,
+    fragmentShader: BEAM_FRAGMENT,
+    uniforms: {
+      uIntensity: { value: 0 },
+      uColor: { value: colorVector(site.color) },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+
+  const cone = new THREE.ConeGeometry(
+    site.beamRadius,
+    site.beamLength,
+    24,
+    1,
+    true
+  );
+
+  cone.translate(0, -site.beamLength / 2, 0);
+  cone.rotateX(Math.PI / 2);
+
+  const beam = new THREE.Mesh(cone, beamMaterial);
+  beam.rotation.x = 0.02;
+  lamp.add(beam);
+
+  // Colored glow sprite
+  const glowMaterial = new THREE.SpriteMaterial({
+    map: sharedGlowTexture,
+    color: site.color,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true,
+    sizeAttenuation: false,
+  });
+
+  const glow = new THREE.Sprite(glowMaterial);
+  lamp.add(glow);
+
+  // Location label
+  lamp.add(
+    makeLabel(site.label, {
+      className: 'label-sea',
+      maxDistance: 40000,
+      offsetY: 0,
+    })
+  );
+
+  const rangeText = site.range
+    ? `${site.range}M`
+    : 'range unverified';
+
+  setInfo(
+    model,
+    site.name,
+    `${site.description}<br>` +
+      `Published characteristic: ${site.light}; ` +
+      `displayed range: ${rangeText}. ` +
+      `Flash cycle and grouping follow the configured reference where available. ` +
+      `Flash durations, sweep, glow, and beam geometry may be approximations. ` +
+      `Not for navigation.`
+  );
+
+  lamp.userData.info = model.userData.info;
+
+  return {
+    site,
+    base,
+    model,
+    lamp,
+    beam,
+    beamMaterial,
+    glow,
+    direction: new THREE.Vector3(),
+    toCamera: new THREE.Vector3(),
+  };
+}
+
+// Compatible with the existing public API:
+//   const lighthouse = new Lighthouse(ctx);
+//   lighthouse.update(camera, time);
+//
+// A single instance manages all configured sites.
+export class Lighthouse {
+  constructor(ctx) {
+    this.group = new THREE.Group();
+
+    const sharedGlowTexture = glowTexture();
+
+    this.sites = SITES.map(site =>
+      makeLighthouse(ctx, site, sharedGlowTexture)
+    );
+
+    for (const lighthouse of this.sites) {
+      this.group.add(
+        lighthouse.model,
+        lighthouse.lamp
+      );
+    }
+  }
+
+  update(camera, time) {
+    const night = SHARED.uNight.value;
+
+    for (const lighthouse of this.sites) {
+      const {
+        site,
+        base,
+        model,
+        lamp,
+        beam,
+        beamMaterial,
+        glow,
+        direction,
+        toCamera,
+      } = lighthouse;
+
+      const scale = model.scale.x;
+
+      lamp.position.set(
+        base.x,
+        base.y + site.lampHeight * scale,
+        base.z
+      );
+
+      // Different sweep rates and phase offsets avoid synchronization.
+      const angle =
+        (time / site.rotationPeriod) * Math.PI * 2 +
+        site.phaseOffset * 0.35;
+
+      lamp.rotation.y = -angle;
+
+      direction.set(
+        Math.sin(angle),
+        0,
+        -Math.cos(angle)
+      );
+
+      toCamera
+        .subVectors(camera.position, lamp.position)
+        .setY(0)
+        .normalize();
+
+      const facing = Math.pow(
+        Math.max(0, direction.dot(toCamera)),
+        24
+      );
+
+      // Flash timing and color
+      const pattern = patternState(site, time);
+      const pulse = pattern.intensity;
+
+      beamMaterial.uniforms.uColor.value.setHex(pattern.color);
+      glow.material.color.setHex(pattern.color);
+
+      const nightFactor = THREE.MathUtils.smoothstep(
+        night,
+        0.08,
+        0.7
+      );
+
+      // Keep a subtle atmospheric beam visible between flashes.
+      const beamLevel =
+        nightFactor *
+        site.beamIntensity *
+        (0.10 + 0.90 * pulse);
+
+      beamMaterial.uniforms.uIntensity.value = beamLevel;
+      beam.visible = night > 0.08;
+
+      beam.scale.setScalar(Math.max(1, scale * 0.25));
+
+      // Camera-facing light produces a stronger glow.
+      const bloom =
+        (0.12 + 0.88 * pulse) *
+        (0.28 + 0.72 * facing);
+
+      const size =
+        (0.010 + 0.055 * bloom) *
+        (0.55 + 0.45 * nightFactor);
+
+      glow.scale.set(size, size, 1);
+
+      glow.material.opacity =
+        nightFactor *
+        (0.12 + 0.88 * bloom);
+    }
+  }
+}
