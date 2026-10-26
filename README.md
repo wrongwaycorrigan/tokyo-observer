@@ -39,14 +39,15 @@ Settings stay in your browser.
 
 ## Data
 
-Open-Meteo, RainViewer, VATSIM METAR, aisstream.io, SondeHub, wspr.live,
+Open-Meteo, RainViewer, VATSIM METAR, JMA, aisstream.io, SondeHub, wspr.live,
 USGS, wheretheiss.at, radio-browser.info, AWS Terrain Tiles, ESA WorldCover,
 OpenStreetMap, OurAirports and the Yale Bright Star Catalogue.
 
 ## Credits
 
 - three.js (MIT)
-- Roads (c) OpenStreetMap contributors, ODbL; runways from OurAirports
+- Roads, airport boundaries, terminals and port buildings (c) OpenStreetMap contributors, ODbL; runways from OurAirports
+- Skytree and Tokyo Tower geometry: PLATEAU (MLIT Japan), CC BY 4.0
 - Stars: Yale Bright Star Catalogue, 5th ed. (Hoffleit & Warren), via CDS
 - Land cover: ESA WorldCover (CC BY 4.0); weather: Open-Meteo (CC BY 4.0)
 - DotGothic16 font by Fontworks (SIL OFL), via Google Fonts

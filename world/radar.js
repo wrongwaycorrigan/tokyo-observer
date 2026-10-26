@@ -10,6 +10,8 @@ const REFRESH_MS = 10 * 60_000;
 const CELL_M = 6_000;
 const MAX_CELLS = 120;
 const RADAR_HALF_M = 110_000;
+const CELL_BASE_M = 4_000;
+const CELL_OPACITY = 0.32;
 
 function loadImage(url) {
   return new Promise((resolve) => {
@@ -24,7 +26,7 @@ function loadImage(url) {
 export class Radar {
   constructor() {
     this.group = new THREE.Group();
-    this.cloudMaterial = gouraudMaterial({ vertexColors: false, specular: 0, opacity: 0.55, tint: 0x5e6577, side: THREE.DoubleSide });
+    this.cloudMaterial = gouraudMaterial({ vertexColors: false, specular: 0, opacity: CELL_OPACITY, tint: 0x6e7487, side: THREE.DoubleSide });
     this.cloudMaterial.depthWrite = false;
     this.box = new THREE.BoxGeometry(1, 1, 1);
     this.cells = [];
@@ -85,9 +87,9 @@ export class Radar {
       if (Math.abs(c.x) > OUTER_HALF_M || Math.abs(c.z) > OUTER_HALF_M) continue;
       const g = new THREE.Group();
       g.position.set(c.x, 0, c.z);
-      const base = 1500;
+      const base = CELL_BASE_M;
       const cloud = new THREE.Mesh(this.box, this.cloudMaterial);
-      cloud.scale.set(CELL_M * 0.9, 500 + c.strength * 900, CELL_M * 0.9);
+      cloud.scale.set(CELL_M * 0.9, 400 + c.strength * 700, CELL_M * 0.9);
       cloud.position.y = base + cloud.scale.y / 2;
       cloud.renderOrder = 2;
       const shaft = createRainShaft(CELL_M * 0.7, base);
@@ -97,6 +99,13 @@ export class Radar {
       this.group.add(g);
       this.cells.push(g);
     }
+  }
+
+  update(camera) {
+    const y = camera.position.y;
+    const level = THREE.MathUtils.smoothstep(Math.abs(y - (CELL_BASE_M + 500)), 300, 1800);
+    const above = 1 - 0.7 * THREE.MathUtils.smoothstep(y, CELL_BASE_M + 1200, CELL_BASE_M + 6000);
+    this.cloudMaterial.uniforms.uOpacity.value = CELL_OPACITY * Math.min(level, above);
   }
 
   get count() {

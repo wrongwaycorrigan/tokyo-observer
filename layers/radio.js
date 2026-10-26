@@ -6,10 +6,9 @@ import { OUTER_HALF_M, toLocal } from '../world/geo.js';
 import { makeLabel, setInfo } from '../world/markers.js';
 
 const STATIONS_URL = 'https://de1.api.radio-browser.info/json/stations/bycountry/Japan?hidebroken=true&order=clickcount&reverse=true&limit=60';
-const NOW_CHARS = 52;
-const LIST_CHARS = 40;
+const NOW_CHARS = 46;
+const LIST_CHARS = 64;
 const VOL_STEPS = 10;
-const SCAN_MS = 10_000;
 const SPECTRUM_MS = 70;
 
 let group = null;
@@ -21,10 +20,9 @@ let analysed = false;
 let playToken = 0;
 let all = [];
 let local = [];
-let band = 'ALL';
-let index = 0;
-let power = false;
-let scanTimer = null;
+let band = 'NET';
+let cursor = 0;
+let playing = null;
 let marquee = 0;
 let volume = 0.7;
 let muted = false;
@@ -32,7 +30,7 @@ let focusHandler = () => {};
 const markers = new Map();
 const el = {};
 
-const stations = () => (band === 'ALL' ? all : local);
+const stations = () => (band === 'NET' ? all : local);
 
 function clean(s) {
   return (s || '').normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim();
@@ -46,29 +44,25 @@ function scroll(text, width) {
 }
 
 function isPlaying() {
-  return power && current && !current.paused;
+  return !!playing && current && !current.paused;
 }
 
 function renderNow() {
-  const s = stations()[index];
-  el.state.textContent = power ? (isPlaying() ? '▶ 再生' : '■ 選局') : '■ 停止';
+  el.state.textContent = isPlaying() ? '\u25B6' : playing ? '\u2026' : '\u25A0';
   el.state.classList.toggle('on', isPlaying());
-  el.text.textContent = power && s ? scroll(clean(s.name).toUpperCase() || 'JP STATION', NOW_CHARS) : '';
-  if (s) {
-    const tags = clean(s.tags).split(',').slice(0, 2).join(' ').toUpperCase();
-    el.meta.textContent = `P${String(index + 1).padStart(2, '0')}/${stations().length} ${band} ${clean(s.codec) || '---'} ${s.bitrate || '---'}K ${tags}`.slice(0, NOW_CHARS + 8);
+  el.text.textContent = playing ? scroll(clean(playing.name).toUpperCase() || 'JP STATION', NOW_CHARS) : 'NO STATION  \u2191\u2193 SELECT  \u23CE PLAY';
+  if (playing) {
+    const tags = clean(playing.tags).split(',').slice(0, 3).join(' ').toUpperCase();
+    el.meta.textContent = `${clean(playing.codec) || '---'} ${playing.bitrate || '---'}K  ${tags}`.slice(0, NOW_CHARS + 10);
   } else {
-    el.meta.textContent = band === 'LOCAL' ? 'NO STATIONS LOCATED AROUND TOKYO' : 'SEARCHING...';
+    el.meta.textContent = ' ';
   }
   const v = muted ? 0 : Math.round(volume * VOL_STEPS);
-  el.volbar.innerHTML = `${'█'.repeat(v)}<span class="empty">${'░'.repeat(VOL_STEPS - v)}</span>`;
-  el.power.classList.toggle('lit', power);
-  el.scan.classList.toggle('lit', !!scanTimer);
+  el.volbar.innerHTML = `${'\u2588'.repeat(v)}<span class="empty">${'\u2591'.repeat(VOL_STEPS - v)}</span>`;
   el.mute.classList.toggle('lit', muted);
-  el.band.textContent = band === 'ALL' ? '全国 ALL' : '関東 LOCAL';
-  el.band.classList.toggle('lit', band === 'LOCAL');
-  el.goto.disabled = !markers.has(s);
-  el.goto.style.opacity = markers.has(s) ? 1 : 0.5;
+  el.local.classList.toggle('lit', band === 'LOCAL');
+  el.net.classList.toggle('lit', band === 'NET');
+  el.count.textContent = stations().length ? `${cursor + 1}/${stations().length}` : band === 'LOCAL' ? 'NONE NEAR TOKYO' : 'SEARCHING';
   el.sim.textContent = isPlaying() ? (analysed ? 'LIVE' : 'SIM') : '';
 }
 
@@ -76,21 +70,22 @@ function renderList() {
   el.list.innerHTML = '';
   stations().forEach((s, i) => {
     const li = document.createElement('li');
-    const num = i < 10 ? `${(i + 1) % 10}` : ' ';
-    li.textContent = ` ${num} ${clean(s.name)}`.slice(0, LIST_CHARS);
+    const rate = s.bitrate ? `${s.bitrate}K` : '';
+    li.textContent = `${String(i + 1).padStart(2, '0')} ${clean(s.name).slice(0, LIST_CHARS - 10).padEnd(LIST_CHARS - 9)}${rate.padStart(5)}`;
     li.title = clean(s.name);
-    li.addEventListener('click', () => tune(i, true));
+    li.addEventListener('click', () => { cursor = i; choose(); });
     el.list.appendChild(li);
   });
   highlight();
 }
 
 function highlight() {
+  const list = stations();
   [...el.list.children].forEach((li, i) => {
-    li.classList.toggle('sel', i === index);
-    li.classList.toggle('playing', i === index && isPlaying());
+    li.classList.toggle('sel', i === cursor);
+    li.classList.toggle('playing', list[i] === playing);
   });
-  el.list.children[index]?.scrollIntoView({ block: 'nearest' });
+  el.list.children[cursor]?.scrollIntoView({ block: 'nearest' });
 }
 
 function render() {
@@ -143,65 +138,6 @@ function stopAudio() {
     a.removeAttribute('src');
     a.load();
   }
-}
-
-function play() {
-  const s = stations()[index];
-  if (!power || !s) return;
-  const token = ++playToken;
-  stopAudio();
-  ensureAnalyser();
-  analyser?.ctx.resume();
-  analysed = !!analyser;
-  current = analyser ? corsAudio : plainAudio;
-  const fallback = () => {
-    if (token !== playToken || current === plainAudio) return;
-    analysed = false;
-    corsAudio.onerror = null;
-    corsAudio.removeAttribute('src');
-    current = plainAudio;
-    plainAudio.src = s.url_resolved;
-    plainAudio.play().catch((e) => console.warn('[Radio] playback failed:', e.message));
-    render();
-  };
-  current.onerror = fallback;
-  current.src = s.url_resolved;
-  current.play().catch(fallback);
-}
-
-function tune(i, turnOn = false) {
-  const list = stations();
-  if (!list.length) return render();
-  index = (i + list.length) % list.length;
-  marquee = 0;
-  if (turnOn && !power) power = true;
-  play();
-  render();
-}
-
-function setPower(on) {
-  power = on;
-  if (on) {
-    play();
-  } else {
-    playToken++;
-    stopAudio();
-    setScan(false);
-  }
-  render();
-}
-
-function setScan(on) {
-  clearInterval(scanTimer);
-  scanTimer = on ? setInterval(() => tune(index + 1), SCAN_MS) : null;
-  render();
-}
-
-function setVolume(v) {
-  volume = THREE.MathUtils.clamp(v, 0, 1);
-  muted = false;
-  applyVolume();
-  render();
 }
 
 const DOT = 3;
@@ -302,6 +238,67 @@ function updateSpectrum(time) {
   }
 }
 
+function play(s) {
+  if (!s) return;
+  const token = ++playToken;
+  playing = s;
+  marquee = 0;
+  stopAudio();
+  ensureAnalyser();
+  analyser?.ctx.resume();
+  analysed = !!analyser;
+  current = analyser ? corsAudio : plainAudio;
+  const fallback = () => {
+    if (token !== playToken || current === plainAudio) return;
+    analysed = false;
+    corsAudio.onerror = null;
+    corsAudio.removeAttribute('src');
+    current = plainAudio;
+    plainAudio.src = s.url_resolved;
+    plainAudio.play().catch((e) => console.warn('[Radio] playback failed:', e.message));
+    render();
+  };
+  current.onerror = fallback;
+  current.src = s.url_resolved;
+  current.play().catch(fallback);
+  render();
+}
+
+function stop() {
+  playToken++;
+  playing = null;
+  stopAudio();
+  render();
+}
+
+function choose() {
+  const s = stations()[cursor];
+  if (s && s === playing) stop();
+  else play(s);
+}
+
+function moveCursor(step) {
+  const n = stations().length;
+  if (!n) return;
+  cursor = (cursor + step + n) % n;
+  render();
+}
+
+function setBand(next) {
+  band = next;
+  const i = stations().indexOf(playing);
+  cursor = i >= 0 ? i : 0;
+  renderList();
+  render();
+}
+
+function setVolume(v) {
+  volume = THREE.MathUtils.clamp(v, 0, 1);
+  muted = false;
+  applyVolume();
+  render();
+}
+
 function volumeFromClick(e) {
   const r = el.volbar.getBoundingClientRect();
   setVolume(Math.round(((e.clientX - r.left) / r.width) * VOL_STEPS) / VOL_STEPS);
@@ -324,9 +321,9 @@ async function loadStations() {
         className: 'label-radio',
         maxDistance: 90_000,
         onClick: () => {
-          band = 'ALL';
-          renderList();
-          tune(all.indexOf(s), true);
+          setBand('NET');
+          cursor = all.indexOf(s);
+          play(s);
           focusHandler(obj);
         },
       }));
@@ -361,28 +358,29 @@ export function init(ctx) {
   }
   applyVolume();
 
-  for (const id of ['state', 'text', 'meta', 'list', 'volbar', 'power', 'scan', 'band', 'mute', 'goto', 'spectrum', 'sim']) el[id] = document.getElementById(`radio-${id}`);
+  for (const id of ['state', 'text', 'meta', 'list', 'volbar', 'mute', 'stop', 'local', 'net', 'count', 'spectrum', 'sim']) el[id] = document.getElementById(`radio-${id}`);
   const on = (id, fn) => document.getElementById(`radio-${id}`).addEventListener('click', fn);
-  on('power', () => setPower(!power));
-  on('prev', () => tune(index - 1));
-  on('next', () => tune(index + 1));
-  on('scan', () => { if (!power) setPower(true); setScan(!scanTimer); });
-  on('band', () => { band = band === 'ALL' ? 'LOCAL' : 'ALL'; index = 0; renderList(); tune(0); });
+  on('local', () => setBand('LOCAL'));
+  on('net', () => setBand('NET'));
+  on('stop', () => (playing ? stop() : choose()));
   on('mute', () => { muted = !muted; applyVolume(); render(); });
   on('voldown', () => setVolume(volume - 1 / VOL_STEPS));
   on('volup', () => setVolume(volume + 1 / VOL_STEPS));
-  on('goto', () => { const m = markers.get(stations()[index]); if (m) focusHandler(m); });
   el.volbar.addEventListener('click', volumeFromClick);
 
   window.addEventListener('keydown', (e) => {
     if (!group.visible || e.target.tagName === 'INPUT') return;
-    if (/^[0-9]$/.test(e.key)) tune((Number(e.key) + 9) % 10, true);
-    else if (e.key === 'p' || e.key === 'P') setPower(!power);
-    else if (e.key === 'n' || e.key === 'N') { if (!power) setPower(true); setScan(!scanTimer); }
-    else if (e.key === ',' || e.key === '<') tune(index - 1);
-    else if (e.key === '.' || e.key === '>') tune(index + 1);
+    const k = e.key;
+    if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); moveCursor(k === 'ArrowDown' ? 1 : -1); }
+    else if (k === 'PageDown' || k === 'PageUp') { e.preventDefault(); moveCursor(k === 'PageDown' ? 6 : -6); }
+    else if (k === 'Enter') { e.preventDefault(); choose(); }
+    else if (k === ' ') { e.preventDefault(); if (playing) stop(); else choose(); }
+    else if (k === 'Tab') { e.preventDefault(); setBand(band === 'NET' ? 'LOCAL' : 'NET'); }
+    else if (k === '-' || k === '_') setVolume(volume - 1 / VOL_STEPS);
+    else if (k === '=' || k === '+') setVolume(volume + 1 / VOL_STEPS);
+    else if (/^[0-9]$/.test(k)) { cursor = (Number(k) + 9) % 10; choose(); }
   });
-  setInterval(() => { if (power) { marquee++; renderNow(); } }, 350);
+  setInterval(() => { if (playing) { marquee++; renderNow(); } }, 350);
   setInterval(() => { if (group.visible) updateSpectrum(performance.now() / 1000); }, SPECTRUM_MS);
 
   loadStations();

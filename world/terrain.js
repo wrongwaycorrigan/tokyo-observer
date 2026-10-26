@@ -11,6 +11,9 @@ const COVER_URL = (z, x, y) => `https://mapproxy.terrascope.be/mapproxy/wmts/esa
 const VERTICAL_EXAGGERATION = 1.4;
 const LAND_MIN_M = 1.5;
 const SEA_FLOOR_MIN_M = -4;
+const SEA_FLOOR_DEEPEST_M = -40;
+const SPIKE_LOWLAND_M = 80;
+const SPIKE_JUMP_M = 60;
 const SHORE_RANGE_M = 30;
 
 export const COVER = {
@@ -29,7 +32,7 @@ const GROUND = {
   [COVER.SHRUB]: ['#4f8a78', '#5f9a82'],
   [COVER.GRASS]: ['#6cc0a0', '#7fd0aa'],
   [COVER.CROP]: ['#e0b884', '#ecc898'],
-  [COVER.BUILT]: ['#b4acb8', '#c4bcc6'],
+  [COVER.BUILT]: ['#a29aac', '#b2aabb'],
   [COVER.BARE]: ['#d8b0a8', '#e4c0b4'],
   [COVER.SNOW]: ['#f4ecfa', '#fcf6ff'],
   [COVER.WATER]: ['#2a4a9a', '#3050a8'],
@@ -161,11 +164,30 @@ class Region {
         let e = sampleElevation(this.dem, p.x, p.y);
         const c = this.coverAt(lon, lat);
         if (c === COVER.WATER || c === COVER.NONE) {
-          if (e < 3) e = Math.min(e, SEA_FLOOR_MIN_M);
+          if (e < 3) e = THREE.MathUtils.clamp(e, SEA_FLOOR_DEEPEST_M, SEA_FLOOR_MIN_M);
         } else {
           e = Math.max(e, LAND_MIN_M);
         }
         this.heights[j * n + i] = e * VERTICAL_EXAGGERATION;
+      }
+    }
+    this.despike();
+  }
+
+  despike() {
+    const n = this.grid + 1;
+    const src = this.heights.slice();
+    const ring = [];
+    for (let j = 1; j < n - 1; j++) {
+      for (let i = 1; i < n - 1; i++) {
+        ring.length = 0;
+        for (let dj = -1; dj <= 1; dj++) {
+          for (let di = -1; di <= 1; di++) if (di || dj) ring.push(src[(j + dj) * n + i + di]);
+        }
+        ring.sort((x, y) => x - y);
+        const median = (ring[3] + ring[4]) / 2;
+        const h = src[j * n + i];
+        if (median < SPIKE_LOWLAND_M && Math.abs(h - median) > SPIKE_JUMP_M) this.heights[j * n + i] = median;
       }
     }
   }

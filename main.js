@@ -13,6 +13,11 @@ import { City } from './world/city.js';
 import { Roads } from './world/roads.js';
 import { Trees } from './world/trees.js';
 import { Runways } from './world/runways.js';
+import { Terminals } from './world/terminals.js';
+import { Port } from './world/port.js';
+import { loadPlateau } from './world/models.js';
+import { startWarnings, warningsHtml } from './world/warnings.js';
+import { crtEnabled, initCrt, setCrt } from './world/crt.js';
 import { Weather, describe } from './world/weather.js';
 import { Ambience } from './world/audio.js';
 import { AirQuality } from './world/airquality.js';
@@ -51,12 +56,14 @@ const LAYERS = {
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+const RAIN_AUDITION = params.has('rain') ? THREE.MathUtils.clamp(Number(params.get('rain')) || 0, 0, 1) : -1;
 
 
 async function main() {
   startBoot();
   await document.fonts.load('16px DotGothic16').catch(() => {});
 
+  initCrt();
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(1);
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -137,18 +144,26 @@ async function main() {
   const runways = new Runways(terrain);
   await runways.load();
   scene.add(runways.group);
+  const terminals = new Terminals(terrain);
+  await terminals.load();
+  scene.add(terminals.group);
+  const port = new Port(terrain);
+  await port.load();
+  scene.add(port.group);
+  const clearOf = (x, z) => runways.covers(x, z) || port.covers(x, z);
+  await loadPlateau();
   stage('city');
   await new Promise((r) => setTimeout(r, 200));
-  const city = new City(terrain, (x, z) => runways.covers(x, z));
+  const city = new City(terrain, clearOf);
   city.build();
   scene.add(city.group);
   stage('trees');
   await new Promise((r) => setTimeout(r, 200));
-  const trees = new Trees(terrain, (x, z) => runways.covers(x, z));
+  const trees = new Trees(terrain, clearOf);
   trees.build();
   scene.add(trees.group);
   stage('roads');
-  const roads = new Roads(terrain);
+  const roads = new Roads(terrain, (x, z) => runways.covers(x, z));
   await roads.load().catch((e) => console.warn('[Roads] failed to load:', e.message));
   scene.add(roads.group);
 
@@ -156,7 +171,7 @@ async function main() {
   scene.add(weather.group);
   const ambience = new Ambience();
   const ctx = { scene, terrain, camera };
-  const pickRoots = [...city.landmarks];
+  const pickRoots = [...city.landmarks, ...port.cranes];
   for (const layer of Object.values(LAYERS)) {
     layer.group = layer.module.init(ctx);
     pickRoots.push(layer.group);
@@ -177,6 +192,7 @@ async function main() {
   tide.start();
   weather.onChange(updatePanels);
   weather.start();
+  startWarnings();
 
   function setLayer(key, on) {
     const layer = LAYERS[key];
@@ -190,6 +206,17 @@ async function main() {
     $(`menu-${key}`).addEventListener('click', () => setLayer(key, !LAYERS[key].on));
     setLayer(key, LAYERS[key].on);
   }
+  const WX_KEY = 'tokyo-observer-weather-panel';
+  let wxOn = true;
+  try { wxOn = localStorage.getItem(WX_KEY) !== 'off'; } catch {}
+  function setWeatherPanel(on) {
+    wxOn = on;
+    try { localStorage.setItem(WX_KEY, on ? 'on' : 'off'); } catch {}
+    $('panel-wx').classList.toggle('hidden', !on);
+    $('menu-wx').classList.toggle('active', on);
+  }
+  $('menu-wx').addEventListener('click', () => setWeatherPanel(!wxOn));
+  setWeatherPanel(wxOn);
   const SOUND_KEY = 'tokyo-observer-sound';
   let soundWanted = true;
   try { soundWanted = localStorage.getItem(SOUND_KEY) !== 'off'; } catch {}
@@ -246,6 +273,8 @@ async function main() {
     $('sources-table').innerHTML = sources().map((src) => `<tr><td class="st-${src.state}">&#9679; ${label[src.state]}</td><td>${escapeHtml(src.name.toUpperCase())}</td><td class="host">${escapeHtml(src.url)}</td><td class="detail">${escapeHtml(src.detail)}</td></tr>`).join('');
   }
   function openSources() {
+    $('crt-toggle').checked = crtEnabled();
+    $('crt-state').textContent = crtEnabled() ? 'ON' : 'OFF';
     $('src-adsb').value = settings.adsbUrl ?? '';
     $('src-ais').value = settings.aisKey ?? '';
     $('src-feeds').innerHTML = '';
@@ -286,6 +315,11 @@ async function main() {
   updateIndicator();
   $('menu-connect').addEventListener('click', () => ($('sources').classList.contains('hidden') ? openSources() : closeSources()));
   $('sources-close').addEventListener('click', closeSources);
+  $('crt-toggle').addEventListener('change', (e) => {
+    setCrt(e.target.checked);
+    $('crt-state').textContent = e.target.checked ? 'ON' : 'OFF';
+  });
+  $('radio-close').addEventListener('click', () => setLayer('radio', false));
   $('src-cancel').addEventListener('click', closeSources);
   $('src-save').addEventListener('click', saveSources);
   $('src-apply').addEventListener('click', applySources);
@@ -300,7 +334,7 @@ async function main() {
       else if (e.key.toLowerCase() === 's') saveSources();
       return;
     }
-    const map = { a: 'menu-air', s: 'menu-sea', o: 'menu-sonde', b: 'menu-radio', q: 'menu-quake', h: 'menu-home', l: 'menu-connect', m: 'sound-toggle' };
+    const map = { a: 'menu-air', s: 'menu-sea', o: 'menu-sonde', b: 'menu-radio', q: 'menu-quake', w: 'menu-wx', h: 'menu-home', l: 'menu-connect', m: 'sound-toggle' };
     const id = map[e.key.toLowerCase()];
     if (id) $(id).click();
     if (e.key === 'Escape') $('info').classList.add('hidden');
@@ -472,6 +506,7 @@ async function main() {
     if (focusObj) {
       focusObj.getWorldPosition(focusPoint);
       focusPoint.y = Math.max(0, focusPoint.y);
+      if (!focusObj.parent || Math.abs(focusPoint.x) > INNER_HALF_M || Math.abs(focusPoint.z) > INNER_HALF_M) goHome();
     } else if (!homing) {
       focusPoint.copy(controls.target);
     } else if (focusPoint.distanceTo(controls.target) < 5) {
@@ -500,6 +535,7 @@ async function main() {
     roads.update(dt);
     runways.update();
     weather.update(camera, dt);
+    radar.update(camera);
     updateRainShafts(camera, time);
     SHARED.uFogNear.value = weather.fogNear;
     SHARED.uFogFar.value = weather.fogFar;
@@ -519,7 +555,9 @@ async function main() {
       const s = sampleSurface();
       const bayNear = 1 - THREE.MathUtils.smoothstep(Math.hypot(controls.target.x, controls.target.z), 4_000, 45_000);
       const height = 1 - 0.7 * THREE.MathUtils.smoothstep(above, 1_500, 60_000);
-      ambience.update({ proximity: THREE.MathUtils.clamp((0.6 * s.water + 0.4 * bayNear) * height, 0, 1), altitude: above });
+      const raining = weather.rain.visible ? THREE.MathUtils.clamp(0.35 + weather.precipitation / 4, 0, 1) : 0;
+      const rainSound = RAIN_AUDITION >= 0 ? RAIN_AUDITION : raining * (1 - THREE.MathUtils.smoothstep(above, 1_500, 3_000));
+      ambience.update({ proximity: THREE.MathUtils.clamp((0.6 * s.water + 0.4 * bayNear) * height, 0, 1), altitude: above, rain: rainSound });
       updateStatus(above);
       hideLabelsUnderWindows();
     }
@@ -556,20 +594,25 @@ async function main() {
     $('ais-status').textContent = settings.aisKey ? 'AIS CONNECTED' : 'AIS DISCONNECTED';
     const lvl = tide.level();
     $('tide-status').textContent = `TIDE ${lvl >= 0 ? '+' : ''}${lvl.toFixed(2)}M ${tide.trend() >= 0 ? 'RISING' : 'FALLING'}`;
-    $('wx-extra').innerHTML = `${airQuality.summary()}<br>RADAR ${radar.count ? `${radar.count} RAIN CELLS` : 'NO RAIN'}`;
+    $('wx-extra').innerHTML = `${airQuality.summary()}<br>RADAR ${radar.count ? `${radar.count} RAIN CELLS` : 'NO RAIN'}<br>${warningsHtml()}`;
     const list = $('quake-list');
     const items = quakes.getRecent(5);
     list.innerHTML = '';
     if (!items.length) list.innerHTML = '<li>NO NEARBY QUAKES</li>';
     for (const q of items) {
       const li = document.createElement('li');
-      li.textContent = `${q.place.slice(0, 14).padEnd(14)} ${q.mag} ${q.time}`;
+      li.textContent = `${q.place.slice(0, 13).padEnd(13)} ${q.mag}${q.shindo ? ` 震${q.shindo}` : ''} ${q.time}`;
       if (q.obj) {
         li.className = 'quake-go';
         li.title = 'Fly to this earthquake';
         li.addEventListener('click', () => setFocus(q.obj));
       } else {
-        li.title = 'Outside the map area';
+        const away = document.createElement('span');
+        away.className = 'quake-away';
+        away.textContent = `
+  ${q.away} OF THE BAY`;
+        li.appendChild(away);
+        li.title = 'Beyond the camera boundary';
       }
       list.appendChild(li);
     }

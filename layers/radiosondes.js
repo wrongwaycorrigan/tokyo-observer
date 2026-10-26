@@ -13,8 +13,8 @@ let timer = null;
 let count = 0;
 
 function pressureColor(hpa) {
-  if (hpa >= 950) return 0xaad8ff;
-  if (hpa >= 850) return 0xe8e0f4;
+  if (hpa >= 950) return 0xffe27a;
+  if (hpa >= 850) return 0xffb48c;
   return 0xffc6e6;
 }
 

@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { register, report } from '../world/sources.js';
-import { CENTER, OUTER_HALF_M, distanceM, toLocal } from '../world/geo.js';
+import { CENTER, INNER_HALF_M, OUTER_HALF_M, distanceM, toLocal } from '../world/geo.js';
 import { forget, makeLabel, setInfo } from '../world/markers.js';
 
+const JMA_URL = 'https://www.jma.go.jp/bosai/quake/data/list.json';
+const JMA_PAGE = 'https://www.jma.go.jp/bosai/map.html?lang=en#contents=earthquake_map';
 const USGS_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
+const SHINDO = { 1: '1', 2: '2', 3: '3', 4: '4', '5-': '5弱', '5+': '5強', '6-': '6弱', '6+': '6強', 7: '7' };
 const REFRESH_MS = 60_000;
 const LIST_RADIUS_M = 400_000;
 
@@ -23,17 +26,55 @@ function jst(ms) {
 
 const ringGeometry = new THREE.RingGeometry(0.92, 1, 64).rotateX(-Math.PI / 2);
 
+async function fromJma() {
+  const res = await fetch(JMA_URL);
+  if (!res.ok) throw new Error(`JMA HTTP ${res.status}`);
+  const latest = new Map();
+  for (const r of await res.json()) {
+    const m = /^([+-][\d.]+)([+-][\d.]+)([+-]\d+)?/.exec(r.cod ?? '');
+    if (!m || !r.mag || Number.isNaN(Number(r.mag))) continue;
+    if (latest.has(r.eid) && latest.get(r.eid).ctt > r.ctt) continue;
+    latest.set(r.eid, r);
+  }
+  return [...latest.values()].map((r) => {
+    const m = /^([+-][\d.]+)([+-][\d.]+)([+-]\d+)?/.exec(r.cod);
+    const lat = Number(m[1]);
+    const lon = Number(m[2]);
+    return {
+      lon, lat,
+      depth: m[3] ? Math.abs(Number(m[3])) / 1000 : 10,
+      mag: Number(r.mag),
+      shindo: SHINDO[r.maxi] ?? null,
+      place: r.en_anm || r.anm,
+      time: Date.parse(r.at),
+      url: JMA_PAGE,
+      source: 'JMA',
+      dist: distanceM(CENTER.lon, CENTER.lat, lon, lat),
+    };
+  });
+}
+
+async function fromUsgs() {
+  const res = await fetch(USGS_URL);
+  if (!res.ok) throw new Error(`USGS HTTP ${res.status}`);
+  return ((await res.json()).features ?? []).map((f) => {
+    const [lon, lat, depth] = f.geometry.coordinates;
+    return { lon, lat, depth, mag: f.properties.mag, shindo: null, place: f.properties.place, time: f.properties.time, url: f.properties.url, source: 'USGS', dist: distanceM(CENTER.lon, CENTER.lat, lon, lat) };
+  });
+}
+
 async function refresh() {
   try {
-    const res = await fetch(USGS_URL);
-    if (!res.ok) { report('usgs', false, `HTTP ${res.status}`); return; }
-    report('usgs', true);
-    const features = (await res.json()).features ?? [];
-    const near = features
-      .map((f) => {
-        const [lon, lat, depth] = f.geometry.coordinates;
-        return { lon, lat, depth, mag: f.properties.mag, place: f.properties.place, time: f.properties.time, url: f.properties.url, dist: distanceM(CENTER.lon, CENTER.lat, lon, lat) };
-      })
+    let all;
+    try {
+      all = await fromJma();
+      report('usgs', true, 'JMA');
+    } catch (e) {
+      console.warn('[Quakes] JMA unavailable, using USGS:', e.message);
+      all = await fromUsgs();
+      report('usgs', true, 'USGS fallback');
+    }
+    const near = all
       .filter((q) => q.mag != null && q.dist < LIST_RADIUS_M)
       .sort((a, b) => b.time - a.time);
     recent = near;
@@ -55,8 +96,8 @@ async function refresh() {
         obj.add(m);
         return m;
       });
-      obj.add(makeLabel(`M${q.mag.toFixed(1)} ${jst(q.time)}`, { className: 'label-quake', maxDistance: 400_000 }));
-      setInfo(obj, `M${q.mag.toFixed(1)} earthquake`, `${q.place ?? ''}<br>Depth ${q.depth.toFixed(0)} km<br>${new Date(q.time).toLocaleString('en-GB', { timeZone: 'Asia/Tokyo' })} JST<br><a href="${q.url}" target="_blank" rel="noopener noreferrer">USGS event page</a>`);
+      obj.add(makeLabel(`M${q.mag.toFixed(1)}${q.shindo ? ` 震度${q.shindo}` : ''} ${jst(q.time)}`, { className: 'label-quake', maxDistance: 400_000 }));
+      setInfo(obj, `M${q.mag.toFixed(1)} earthquake`, `${q.place ?? ''}<br>${q.shindo ? `Max intensity shindo ${q.shindo}<br>` : ''}Depth ${q.depth.toFixed(0)} km<br>${new Date(q.time).toLocaleString('en-GB', { timeZone: 'Asia/Tokyo' })} JST<br><a href="${q.url}" target="_blank" rel="noopener noreferrer">${q.source} information</a>`);
       group.add(obj);
       rings.push({ obj, ringMeshes, radius: 1500 * 2 ** q.mag / 8, born: q.time });
       q.obj = obj;
@@ -68,7 +109,7 @@ async function refresh() {
 }
 
 export function init(ctx) {
-  register('usgs', 'Earthquakes', 'earthquake.usgs.gov');
+  register('usgs', 'Earthquakes', 'www.jma.go.jp (USGS fallback)');
   group = new THREE.Group();
   group.visible = false;
   ctx.scene.add(group);
@@ -101,16 +142,37 @@ export function getCount() {
   return recent.length;
 }
 
+const DIRECTIONS = [['Northeastern', 'NE'], ['Northwestern', 'NW'], ['Southeastern', 'SE'], ['Southwestern', 'SW'], ['Northern', 'N'], ['Southern', 'S'], ['Eastern', 'E'], ['Western', 'W'], ['Central', 'C']];
+
 function shortPlace(place) {
-  const name = (place ?? 'Unknown').split(' of ').pop().replace(/,\s*Japan$/i, '');
+  let name = place ?? 'Unknown';
+  if (/^off the coast of /i.test(name)) name = `Off ${name.replace(/^off the coast of /i, '')}`;
+  else name = name.split(' of ').pop();
+  for (const [long, short] of DIRECTIONS) name = name.replace(new RegExp(`\\b${long}\\b`, 'g'), short);
+  name = name.replace(/\s*Prefecture\b/gi, '').replace(/,\s*Japan$/i, '').replace(/,/g, '');
   return name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 }
 
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+function bearing(q) {
+  const dx = (q.lon - CENTER.lon) * Math.cos((CENTER.lat * Math.PI) / 180);
+  const dy = q.lat - CENTER.lat;
+  const deg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+  return COMPASS[Math.round(deg / 45) % 8];
+}
+
 export function getRecent(limit = 5) {
-  return recent.slice(0, limit).map((q) => ({
-    place: shortPlace(q.place),
-    mag: `M${q.mag.toFixed(1)}`,
-    time: jst(q.time),
-    obj: q.obj ?? null,
-  }));
+  return recent.slice(0, limit).map((q) => {
+    const p = toLocal(q.lon, q.lat);
+    const inside = Math.abs(p.x) <= INNER_HALF_M && Math.abs(p.z) <= INNER_HALF_M;
+    return {
+      place: shortPlace(q.place),
+      mag: `M${q.mag.toFixed(1)}`,
+      shindo: q.shindo,
+      time: jst(q.time),
+      obj: inside ? q.obj ?? null : null,
+      away: `${Math.round(q.dist / 1000)}KM ${bearing(q)}`,
+    };
+  });
 }

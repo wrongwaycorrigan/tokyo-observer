@@ -142,6 +142,9 @@ function hull(m, len, w, h, color, { bowRake = 0.22, deckColor } = {}) {
 }
 
 const WINDOW = '#1b2a44';
+const LIVERY_BODY = '#f2f2ee';
+const LIVERY_STRIPE = '#2a4b8d';
+const LIVERY_TAIL = '#2a4b8c';
 
 const BUILDERS = {
   airliner(m) {
@@ -154,8 +157,8 @@ const BUILDERS = {
       { t: 16, w: 1.6, h: 1.7, y: -0.2 },
       { t: 18.6, w: 0.6, h: 0.7, y: -0.5 },
       { t: 19.2, w: 0.1, h: 0.1, y: -0.6 },
-    ], '#f2f2ee');
-    box(m, [0, 0.5, 2], [4.15, 0.6, 22], '#2a4b8d');
+    ], LIVERY_BODY);
+    box(m, [0, 0.5, 2], [4.15, 0.6, 22], LIVERY_STRIPE);
     box(m, [0, 0.7, 16.2], [2.6, 0.5, 1.4], WINDOW);
 
     for (const s of [-1, 1]) {
@@ -176,7 +179,7 @@ const BUILDERS = {
     block(m, [
       [-0.25, 1.5, -18], [0.25, 1.5, -18], [0.25, 1.5, -12], [-0.25, 1.5, -12],
       [-0.2, 7.5, -20], [0.2, 7.5, -20], [0.2, 7.5, -17], [-0.2, 7.5, -17],
-    ], '#2a4b8d');
+    ], LIVERY_TAIL);
   },
 
   cargoShip(m) {
@@ -347,6 +350,20 @@ const BUILDERS = {
     box(m, [0, 8, 50], [160, 16, 80], '#bfb6a6');
   },
 
+  gantryCrane(m) {
+    const frame = '#e8e0f4';
+    const boom = '#d8482e';
+    for (const x of [-14, 14]) {
+      for (const z of [-12, 12]) box(m, [x, 22.5, z], [2.2, 45, 2.2], frame);
+      box(m, [x, 45, 0], [2.2, 3, 26], frame);
+    }
+    for (const z of [-12, 12]) box(m, [0, 45, z], [30, 3, 2.2], frame);
+    box(m, [0, 8, 0], [30, 1.6, 1.6], frame);
+    taperBox(m, [0, 60, -2], [7, 24, 4], 0.35, frame);
+    box(m, [0, 50, 20], [4, 3, 72], boom);
+    box(m, [0, 52, -15], [12, 7, 12], boom);
+  },
+
   controlTower(m) {
     taperBox(m, [0, 18, 0], [9, 36, 9], 0.75, '#e6e2d8');
     block(m, [
@@ -464,6 +481,70 @@ export function createTower({ w, d, h, color, style = 'slab', spire = 0 }) {
   box(m, [0, 6, 0], [w * 1.5, 12, d * 1.4], darker(color, 0.9));
   _sharedMaterial ??= gouraudMaterial({ side: THREE.DoubleSide });
   return { mesh: new THREE.Mesh(toGeometry(m), _sharedMaterial), beacons: roofs };
+}
+
+const PLATEAU_BANDS = {
+  skytree: [[0, '#dfe6ee'], [338, '#6d8fb8'], [368, '#dfe6ee'], [443, '#6d8fb8'], [462, '#dfe6ee'], [497, '#c8ced6']],
+  tokyoTower: [[0, '#e8501c'], [46, '#f2f2ee'], [92, '#e8501c'], [120, '#f2f2ee'], [143, '#4a6a92'], [160, '#f2f2ee'], [175, '#e8501c'], [225, '#f2f2ee'], [247, '#4a6a92'], [253, '#f2f2ee'], [255, '#e8501c']],
+};
+
+export async function loadPlateau() {
+  try {
+    const { models } = await (await fetch('./data/plateau_landmarks.json')).json();
+    for (const [name, m] of Object.entries(models)) {
+      const bands = (PLATEAU_BANDS[name] ?? [[0, '#d9d1c2']]).map(([h, c]) => [h, rgb(c)]);
+      const indexed = new THREE.BufferGeometry();
+      indexed.setAttribute('position', new THREE.Float32BufferAttribute(m.positions, 3));
+      indexed.setIndex(m.indices);
+      const g = indexed.toNonIndexed();
+      const pos = g.attributes.position;
+      const col = new Float32Array(pos.count * 3);
+      for (let t = 0; t < pos.count; t += 3) {
+        const y = (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3;
+        let c = bands[0][1];
+        for (const [h, bc] of bands) if (y >= h) c = bc;
+        for (let k = 0; k < 3; k++) col.set(c, (t + k) * 3);
+      }
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      _geometries.set(name, g);
+    }
+  } catch (e) {
+    console.warn('[Models] PLATEAU landmarks unavailable, using built-in models', e);
+  }
+}
+
+const _liveries = new Map();
+
+function liveryGeometry({ body, stripe, tail }) {
+  const key = `${body}|${stripe}|${tail}`;
+  if (!_liveries.has(key)) {
+    const g = modelGeometry('airliner').clone();
+    const col = g.attributes.color;
+    const swaps = [[rgb(LIVERY_BODY), rgb(body)], [rgb(LIVERY_STRIPE), rgb(stripe)], [rgb(LIVERY_TAIL), rgb(tail)]];
+    for (let i = 0; i < col.count; i++) {
+      for (const [from, to] of swaps) {
+        if (Math.abs(col.getX(i) - from[0]) + Math.abs(col.getY(i) - from[1]) + Math.abs(col.getZ(i) - from[2]) < 1e-3) {
+          col.setXYZ(i, to[0], to[1], to[2]);
+          break;
+        }
+      }
+    }
+    _liveries.set(key, g);
+  }
+  return _liveries.get(key);
+}
+
+export function airlinerGeometry(livery) {
+  return livery ? liveryGeometry(livery) : modelGeometry('airliner');
+}
+
+export function createAirliner(livery, { tint } = {}) {
+  const material = gouraudMaterial({ tint: tint ?? 0xffffff, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(airlinerGeometry(livery), material);
+  mesh.userData.modelName = 'airliner';
+  return mesh;
 }
 
 export function createModel(name, { tint } = {}) {

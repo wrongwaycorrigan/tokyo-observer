@@ -41,7 +41,7 @@ const FRAGMENT = /* glsl */ `
     vec3 d = normalize(vDir);
     float h = max(d.y, 0.0);
     vec3 c = mix(uHorizon, uZenith, pow(h, 0.5));
-    c += vec3(0.25, 0.05, 0.2) * pow(1.0 - h, 8.0) * (1.0 - uOvercast);
+    c += vec3(0.25, 0.05, 0.2) * pow(1.0 - h, 8.0) * (1.0 - uOvercast) * (0.3 + 0.7 * uNight);
     if (d.y < 0.0) c = uHorizon * 0.8;
 
     vec3 s = normalize(uSunPos);
@@ -66,9 +66,9 @@ const KEYS = [
   [-18, '#0a0420', '#2a0f4a', '#4a3a9a', '#2c2050'],
   [-6, '#16083c', '#7a2a8a', '#6a4aaa', '#3c2c60'],
   [0, '#3a1a7a', '#ff4a9a', '#ff7aa0', '#7a5088'],
-  [8, '#4a3aa8', '#ffa07a', '#ffc090', '#a888b8'],
-  [25, '#5a8ae0', '#ffc0e0', '#fff0e8', '#a8a8d4'],
-  [90, '#4a90f0', '#f0d0f4', '#ffffff', '#b0b0dc'],
+  [8, '#4a3aa8', '#ffa07a', '#e8a474', '#5e4c70'],
+  [25, '#5a8ae0', '#ffc0e0', '#ddd0c4', '#565878'],
+  [90, '#4a90f0', '#f0d0f4', '#ece6de', '#62668a'],
 ];
 const KEY_COLORS = KEYS.map(([e, ...cs]) => [e, ...cs.map((c) => new THREE.Color(c))]);
 const OVERCAST_SKY = new THREE.Color('#a89cb8');
@@ -136,7 +136,7 @@ export class Sky {
     SHARED.uSunDir.value.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
 
     lerpKeys(elevation, 3, SHARED.uSunColor.value).multiplyScalar(1 - oc * 0.55);
-    lerpKeys(elevation, 4, SHARED.uAmbient.value).lerp(this._tmp.set(0.55, 0.5, 0.62).multiplyScalar(0.3 + 0.7 * daylight), oc * 0.5);
+    lerpKeys(elevation, 4, SHARED.uAmbient.value).lerp(this._tmp.set(0.44, 0.42, 0.52).multiplyScalar(0.3 + 0.7 * daylight), oc * 0.5);
 
     this.flash = Math.max(0, this.flash - dt * 6);
     if (this.flash > 0) {
@@ -146,6 +146,6 @@ export class Sky {
     }
 
     SHARED.uNight.value = 1 - daylight;
-    SHARED.uFogColor.value.copy(this.uniforms.uHorizon.value);
+    SHARED.uFogColor.value.copy(this.uniforms.uHorizon.value).lerp(this.uniforms.uZenith.value, 0.4 * daylight);
   }
 }

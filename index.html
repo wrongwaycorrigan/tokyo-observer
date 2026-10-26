@@ -34,9 +34,9 @@
       --link: #63dae3;
       --shadow: #000000;
       --label-air: #6ae8f1;
-      --label-sea: #7ddfc5;
-      --label-port: #f2a984;
-      --label-sonde: #aad8ff;
+      --label-sea: #3a6ad8;
+      --label-port: #3a6ad8;
+      --label-sonde: #ffb48c;
       --label-radio: #f158be;
       --label-tower: #dad3e6;
       --label-wspr: #b98af0;
@@ -73,8 +73,9 @@
       cursor: pointer;
     }
     .label-air { color: var(--label-air); }
+    .label-sea, .label-port { text-shadow: none; }
     .label-sea { color: var(--label-sea); }
-    .label-port { color: var(--label-port); }
+    .label-port { color: var(--label-port); font-family: 'DotGothic16', 'Segoe UI Symbol', 'Noto Sans Symbols 2', monospace; }
     .label-sonde { color: var(--label-sonde); }
     .label-radio { color: var(--label-radio); }
     .label-tower { color: var(--label-tower); }
@@ -85,7 +86,7 @@
     .label-airport { color: var(--label-airport); }
     .label-aqi, .aqi-good { color: #7ddfc5; }
     .aqi-moderate { color: var(--accent); }
-    .aqi-sensitive { color: var(--label-port); }
+    .aqi-sensitive { color: #f2a984; }
     .aqi-bad { color: var(--label-quake); }
     .map-label:hover { background: var(--panel); }
 
@@ -172,6 +173,10 @@
     #quake-list li { white-space: pre; }
     #quake-list li.quake-go { color: var(--text); cursor: pointer; }
     #quake-list li.quake-go:hover { background: var(--select); color: var(--ink); }
+    #quake-list .quake-away { color: var(--muted); }
+    .wx-advisory { color: #f3d572; }
+    .wx-warning { color: #ff3a2a; }
+    .wx-emergency { color: #ff5ec8; }
     .window li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hidden { display: none !important; }
 
@@ -248,43 +253,45 @@
       text-shadow: none;
     }
     #panel-radio .wtitle { background: #000000; color: #6ae8f1; }
-    .x68-head { display: flex; gap: 10px; white-space: pre; overflow: hidden; height: 17px; }
-    .x68-head .state { color: #888888; }
-    .x68-head .state.on { color: #6ae8f1; }
-    #radio-text { color: #ffffff; }
-    .radio-meta { color: #f3d572; white-space: pre; overflow: hidden; height: 17px; }
-    .x68-body { display: flex; gap: 12px; margin: 8px 0; }
-    .radio-list {
-      list-style: none;
-      flex: 1;
-      min-width: 0;
-      height: 144px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      border: 1px solid #306b61;
-      scrollbar-width: thin;
-      scrollbar-color: #306b61 #000000;
-    }
-    .radio-list li { height: 18px; white-space: pre; overflow: hidden; cursor: pointer; color: #cccccc; padding: 0 4px; }
-    .radio-list li:hover { background: #164440; }
-    .radio-list li.sel { background: #6ae8f1; color: #000000; }
-    .radio-list li.playing::before { content: '\266a'; }
-    .radio-list li:not(.playing)::before { content: ' '; }
-    .x68-meter { border: 1px solid #306b61; padding: 2px 6px; width: 240px; flex: none; }
-    .x68-meter .cap { display: flex; justify-content: space-between; color: #5bab99; height: 17px; }
-    #radio-sim { color: #f2a984; }
-    #radio-spectrum { display: block; width: 228px; height: 96px; image-rendering: pixelated; }
+    #panel-radio .bc-viz { border: 1px solid #306b61; padding: 2px 5px 0; }
     .spec-legend { height: 0; position: relative; top: 2px; text-align: right; font-size: 12px; line-height: 12px; z-index: 1; }
     .spec-legend .k-mid { color: #f3d572; }
     .spec-legend .k-side { color: #5bab99; }
     .spec-legend .k-peak { color: #ff5ec8; }
+    #radio-sim { color: #f2a984; }
+    #radio-spectrum { display: block; width: 564px; max-width: 100%; height: 138px; image-rendering: pixelated; }
     .spec-axis { display: flex; justify-content: space-between; color: #5bab99; height: 14px; line-height: 14px; font-size: 12px; }
-    .radio-controls, .radio-vol { display: flex; gap: 10px; flex-wrap: nowrap; align-items: center; height: 22px; }
-    .radio-vol { margin-top: 8px; }
-    #panel-radio .dosbtn { background: #222222; color: #dddddd; box-shadow: 3px 3px 0 #306b61; padding: 1px 7px; }
-    #panel-radio .dosbtn .hk { color: #f3d572; }
-    #panel-radio .dosbtn.lit { background: #6ae8f1; color: #000000; }
-    #panel-radio .dosbtn.lit .hk { color: #82266d; }
+    .bc-now { display: flex; gap: 8px; white-space: pre; overflow: hidden; height: 18px; margin-top: 6px; }
+    .bc-now .state { color: #888888; }
+    .bc-now .state.on { color: #6ae8f1; }
+    #radio-text { color: #ffffff; }
+    .bc-meta { color: #f3d572; white-space: pre; overflow: hidden; height: 18px; }
+    .bc-tabs, .bc-bar { display: flex; gap: 8px; align-items: center; height: 22px; white-space: nowrap; }
+    .bc-tabs { margin-top: 4px; }
+    .bc-count { margin-left: auto; color: #5bab99; }
+    .bc-keys { margin-left: auto; color: #306b61; }
+    #panel-radio .dim { color: #5bab99; }
+    #panel-radio .tab { font: inherit; background: none; border: 0; padding: 0 2px; color: #888888; cursor: pointer; }
+    #panel-radio .tab:hover { color: #ffffff; }
+    #panel-radio .tab.lit { background: #6ae8f1; color: #000000; }
+    #panel-radio .radio-list {
+      list-style: none;
+      max-width: none;
+      margin: 2px 0 4px;
+      height: 108px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-top: 1px solid #306b61;
+      border-bottom: 1px solid #306b61;
+      scrollbar-width: thin;
+      scrollbar-color: #306b61 #000000;
+    }
+    .radio-list li { height: 18px; white-space: pre; overflow: hidden; cursor: pointer; color: #aaaaaa; padding: 0 4px; }
+    .radio-list li:hover { color: #ffffff; }
+    .radio-list li.sel { background: #164440; color: #ffffff; }
+    .radio-list li.playing { color: #6ae8f1; }
+    .radio-list li.playing::before { content: '\25B6 '; }
+    .radio-list li:not(.playing)::before { content: '  '; }
     .x68-vol-bar { cursor: pointer; color: #6ae8f1; letter-spacing: 0; }
     .x68-vol-bar .empty { color: #164440; }
     .dosbtn {
@@ -314,7 +321,10 @@
       z-index: 30;
       padding: 18px 16px 12px;
     }
-    #sources, #sources .wtitle, #sources .close-x { background: var(--panel); }
+    #sources, #sources .close-x { background: var(--panel); }
+    #sources .close-x { top: 4px; right: 6px; }
+    #sources { padding-top: 28px; }
+    #panel-radio .close-x { background: #000000; color: #6ae8f1; }
     #sources fieldset { border: 1px solid var(--edge); padding: 8px 10px 10px; margin: 0 0 14px; min-width: 0; }
     #sources legend { color: var(--accent); padding: 0 6px; }
     #sources table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -329,6 +339,10 @@
     #sources .st-off { color: var(--muted); }
     #sources .field { display: grid; grid-template-columns: 200px 1fr; gap: 10px; align-items: center; margin: 6px 0; }
     #sources .field small { display: block; color: var(--muted); font-size: 13px; line-height: 15px; }
+    #sources .field.check input { width: auto; accent-color: var(--select); }
+    #sources .dim { color: var(--muted); }
+    #crt { position: fixed; inset: 0; z-index: 10000; pointer-events: none; mix-blend-mode: multiply; image-rendering: pixelated; background-repeat: repeat; opacity: 0.45; }
+    html.crt { filter: brightness(1.16) saturate(1.04); }
     #sources input {
       font: inherit;
       background: var(--ink);
@@ -364,46 +378,44 @@
     <button id="menu-sonde">Radi<span class="hk">o</span>sonde</button>
     <button id="menu-radio"><span class="hk">B</span>roadcast</button>
     <button id="menu-quake"><span class="hk">Q</span>uake</button>
+    <button id="menu-wx" title="Weather panel (W)"><span class="hk">W</span>eather</button>
     <button id="menu-connect" title="Settings and data sources (L)"><span id="connect-dot" aria-hidden="true">&#9881;&#65038;</span><span class="sr-only">Settings</span></button>
   </nav>
 
   <div id="panels">
     <div id="panel-air" class="window hidden"><span class="wtitle" title="Air traffic">【航空交通】</span>AIRCRAFT <span class="count" id="count-air">0</span></div>
     <div id="panel-sea" class="window hidden"><span class="wtitle" title="Tokyo Bay">【東京湾】</span>CONTACTS <span class="count" id="count-sea">0</span><br><span id="tide-status"></span><br><span id="ais-status"></span></div>
-    <div id="panel-sonde" class="window hidden"><span class="wtitle" title="Radiosondes">【高層観測】</span>BALLOONS <span class="count" id="count-sonde">0</span></div>
+    <div id="panel-sonde" class="window hidden"><span class="wtitle" title="Radiosondes">【高層観測】</span>WEATHER BALLOONS <span class="count" id="count-sonde">0</span></div>
     <div id="panel-wx" class="window"><span class="wtitle" title="Weather">【天気】</span><div id="wx-body">CONTACTING OPEN-METEO...</div><div id="wx-extra"></div></div>
     <div id="panel-quake" class="window hidden"><span class="wtitle" title="Earthquakes">【地震】</span><ul id="quake-list"></ul>WITHIN 400KM, TIMES JST <span class="count" id="count-quake">0</span></div>
   </div>
 
   <div id="panel-radio" class="window hidden" role="region" aria-label="Broadcast">
     <span class="wtitle">&#12304;&#9834; BROADCAST &#25918;&#36865;&#12305;</span>
-    <div class="x68-head"><span class="state" id="radio-state">&#9632; &#20572;&#27490;</span><span id="radio-text"></span></div>
-    <div class="radio-meta" id="radio-meta"> </div>
-    <div class="x68-body">
-      <ul class="radio-list" id="radio-list"></ul>
-      <div class="x68-meter">
-        <div class="cap"><span>SPECTRUM &#21608;&#27874;&#25968;</span><span id="radio-sim"></span></div>
-        <div class="spec-legend"><span class="k-mid">&#9632;MID</span> <span class="k-side">&#9632;SIDE</span> <span class="k-peak">&#9632;PEAK</span></div>
-        <canvas id="radio-spectrum" width="228" height="96" aria-hidden="true"></canvas>
-        <div class="spec-axis"><span>20</span><span>200</span><span>2k</span><span>20kHz</span></div>
-      </div>
+    <button id="radio-close" class="close-x" title="Close (B)">[&#9632;]</button>
+    <div class="bc-viz">
+      <div class="spec-legend"><span id="radio-sim"></span> <span class="k-mid">&#9632;MID</span> <span class="k-side">&#9632;SIDE</span> <span class="k-peak">&#9632;PEAK</span></div>
+      <canvas id="radio-spectrum" width="564" height="138" aria-hidden="true"></canvas>
+      <div class="spec-axis"><span>20Hz</span><span>200</span><span>2k</span><span>20kHz</span></div>
     </div>
-    <div class="radio-controls">
-      <button class="dosbtn" id="radio-power" title="Power (P)"><span class="hk">P</span> &#38651;&#28304;</button>
-      <button class="dosbtn" id="radio-prev" title="Previous station (&lt;)">&#9668;</button>
-      <button class="dosbtn" id="radio-next" title="Next station (&gt;)">&#9658;</button>
-      <button class="dosbtn" id="radio-scan" title="Auto-scan every 10 seconds (N)"><span class="hk">N</span> &#36208;&#26619;</button>
-      <button class="dosbtn" id="radio-band" title="ALL: every Japanese station. LOCAL: only stations located around Tokyo">&#20840;&#22269; ALL</button>
-      <button class="dosbtn" id="radio-goto" title="Fly the camera to this station">&#31227;&#21205; GO TO</button>
+    <div class="bc-now"><span class="state" id="radio-state">&#9632;</span><span id="radio-text"></span></div>
+    <div class="bc-meta" id="radio-meta"> </div>
+    <div class="bc-tabs">
+      <button class="tab" id="radio-local" title="Stations located around Tokyo (Tab)">[ LOCAL &#38306;&#26481; ]</button>
+      <button class="tab" id="radio-net" title="All Japanese internet stations (Tab)">[ NET &#20840;&#22269; ]</button>
+      <span class="bc-count" id="radio-count"></span>
     </div>
-    <div class="radio-vol">
-      &#38899;&#37327; <button class="dosbtn" id="radio-voldown" aria-label="Volume down">-</button><span class="x68-vol-bar" id="radio-volbar" title="Click to set volume"></span><button class="dosbtn" id="radio-volup" aria-label="Volume up">+</button>
-      <button class="dosbtn" id="radio-mute">&#28040;&#38899; MUTE</button>
+    <ul class="radio-list" id="radio-list"></ul>
+    <div class="bc-bar">
+      <span class="dim">VOL</span>
+      <button class="tab" id="radio-voldown" aria-label="Volume down" title="Volume down (-)">-</button><span class="x68-vol-bar" id="radio-volbar" title="Click to set volume"></span><button class="tab" id="radio-volup" aria-label="Volume up" title="Volume up (+)">+</button>
+      <button class="tab" id="radio-mute" title="Mute">[ MUTE ]</button>
+      <button class="tab" id="radio-stop" title="Stop or play the selected station (Space)">[ &#9632;/&#9654; ]</button>
+      <span class="bc-keys">&#8593;&#8595; &#9166; TAB</span>
     </div>
   </div>
 
   <div id="sources" class="window hidden" role="dialog" aria-label="Settings">
-    <span class="wtitle">&#12304;SETTINGS &#35373;&#23450;&#12305;</span>
     <button id="sources-close" class="close-x" title="Close (Esc)">[&#9632;]</button>
     <fieldset>
       <legend>STATUS</legend>
@@ -416,6 +428,12 @@
       </label>
       <label class="field" for="src-ais"><span>SHIPS<small>aisstream.io API key</small></span>
         <input id="src-ais" type="password" spellcheck="false" autocomplete="off" placeholder="paste key">
+      </label>
+    </fieldset>
+    <fieldset>
+      <legend>DISPLAY</legend>
+      <label class="field check" for="crt-toggle"><span>CRT</span>
+        <span><input id="crt-toggle" type="checkbox"> <span id="crt-state" class="dim">ON</span></span>
       </label>
     </fieldset>
     <fieldset>

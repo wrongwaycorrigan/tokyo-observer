@@ -48,9 +48,10 @@ def main(source=None):
         data = fetch()
     roads = []
     for el in data['elements']:
-        cls = CLASSES.get(el.get('tags', {}).get('highway'))
+        tags = el.get('tags', {})
+        cls = CLASSES.get(tags.get('highway'))
         geom = el.get('geometry')
-        if cls is None or not geom:
+        if cls is None or not geom or tags.get('tunnel', 'no') != 'no':
             continue
         pts = simplify([(g['lon'], g['lat']) for g in geom], TOLERANCE_M)
         flat = [cls]

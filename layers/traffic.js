@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { onSettingsChange, register, report, settings } from '../world/sources.js';
 import { toLocal } from '../world/geo.js';
-import { createModel } from '../world/models.js';
+import { airlinerGeometry, createAirliner } from '../world/models.js';
+import { airlineOf } from './liveries.js';
+import { SHARED } from '../world/shading.js';
 import { forget, keepVisible, makeLabel, setInfo } from '../world/markers.js';
 
 const REFRESH_MS = 5_000;
@@ -11,6 +13,7 @@ const MIN_BLEND_S = 2;
 const MAX_BLEND_S = 10;
 const LOW_ALT = new THREE.Color('#72f6ff');
 const HIGH_ALT = new THREE.Color('#ff5ec8');
+const WHITE = new THREE.Color(0xffffff);
 
 const LIGHTS = [
   [-17, -0.1, 4, 'nav', '#ff2020'],
@@ -23,13 +26,45 @@ const LIGHTS = [
 ];
 const lightColors = LIGHTS.map((l) => new THREE.Color(l[4]));
 
+const LIGHT_VERTEX = /* glsl */ `
+  uniform float uNight;
+  varying vec3 vColor;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float d = length(mv.xyz);
+    float reach = mix(6000.0, 40000.0, uNight);
+    float fade = 1.0 - smoothstep(reach * 0.3, reach, d);
+    float glow = fade * mix(0.45, 1.0, uNight);
+    vColor = color * glow;
+    gl_PointSize = glow > 0.05 ? mix(1.0, d < 3000.0 ? 4.0 : 3.0, fade) : 0.0;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const LIGHT_FRAGMENT = /* glsl */ `
+  varying vec3 vColor;
+  void main() {
+    if (max(vColor.r, max(vColor.g, vColor.b)) < 0.02) discard;
+    gl_FragColor = vec4(vColor, 1.0);
+  }
+`;
+
+let lightMaterial = null;
+
 function makeLights() {
+  lightMaterial ??= new THREE.ShaderMaterial({
+    vertexShader: LIGHT_VERTEX,
+    fragmentShader: LIGHT_FRAGMENT,
+    uniforms: { uNight: SHARED.uNight },
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(LIGHTS.flatMap((l) => l.slice(0, 3)), 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(LIGHTS.length * 3), 3));
-  return new THREE.Points(g, new THREE.PointsMaterial({
-    size: 5, sizeAttenuation: false, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
+  return new THREE.Points(g, lightMaterial);
 }
 
 let group = null;
@@ -57,7 +92,8 @@ function upsert(ac) {
   }
   if (!a) {
     const obj = new THREE.Group();
-    const mesh = createModel('airliner', { tint: tint.getHex() });
+    const livery = airlineOf(callsign);
+    const mesh = createAirliner(livery, { tint: livery ? 0xffffff : tint.getHex() });
     obj.add(mesh);
     const label = makeLabel(callsign, { className: 'label-air', maxDistance: 40_000, offsetY: 22 });
     obj.add(label);
@@ -66,7 +102,7 @@ function upsert(ac) {
     keepVisible(obj, 40, 56, 800, 3);
     obj.position.copy(predicted);
     group.add(obj);
-    a = { obj, mesh, label, lights, phase: Math.random() * 1.3, offset: new THREE.Vector3(), blendStart: now, blendDur: 1 };
+    a = { obj, mesh, label, lights, livery, phase: Math.random() * 1.3, offset: new THREE.Vector3(), blendStart: now, blendDur: 1 };
     aircraft.set(ac.hex, a);
   } else {
     a.offset.subVectors(a.obj.position, predicted);
@@ -78,9 +114,13 @@ function upsert(ac) {
   a.vel = vel;
   a.obj.rotation.set(0, -track, 0);
   a.mesh.rotation.x = Math.atan2(climb, Math.max(speed, 1)) * 0.6;
-  a.mesh.material.uniforms.uTint.value.copy(tint);
+  if (!a.livery) {
+    a.livery = airlineOf(callsign);
+    if (a.livery) a.mesh.geometry = airlinerGeometry(a.livery);
+  }
+  a.mesh.material.uniforms.uTint.value.copy(a.livery ? WHITE : tint);
   a.label.element.textContent = `${callsign} ${Math.round(altFt / 100).toString().padStart(3, '0')}`;
-  setInfo(a.obj, callsign || 'Unknown', `${ac.t ? `${ac.t}<br>` : ''}Altitude ${Math.round(altFt)} ft<br>Speed ${Math.round(ac.gs ?? 0)} kt<br>Track ${Math.round(ac.track ?? 0)}&deg;`);
+  setInfo(a.obj, callsign || 'Unknown', `${a.livery ? `${a.livery.name}<br>` : ''}${ac.t ? `${ac.t}<br>` : ''}Altitude ${Math.round(altFt)} ft<br>Speed ${Math.round(ac.gs ?? 0)} kt<br>Track ${Math.round(ac.track ?? 0)}&deg;`);
   a.lastUpdate = Date.now();
 }
 
@@ -112,7 +152,7 @@ async function refresh() {
 }
 
 export function init(ctx) {
-  register('adsb', 'Aircraft (ADS-B)', 'your receiver');
+  register('adsb', 'Aircraft (ADS-B)', 'tar1090 / readsb aircraft.json');
   onSettingsChange(() => { if (group.visible) refresh(); });
   group = new THREE.Group();
   group.visible = false;

@@ -22,8 +22,9 @@ function pointMaterial(size) {
 }
 
 export class Roads {
-  constructor(terrain) {
+  constructor(terrain, keepClear = () => false) {
     this.terrain = terrain;
+    this.keepClear = keepClear;
     this.group = new THREE.Group();
     this.roads = [];
     this.cars = [];
@@ -37,21 +38,29 @@ export class Roads {
     const p = { x: 0, y: 0, z: 0 };
     for (const flat of data.roads) {
       const cls = flat[0];
-      const pts = [];
-      for (let i = 1; i < flat.length; i += 2) {
-        toLocal(flat[i], flat[i + 1], 0, p);
-        if (Math.abs(p.x) > INNER_HALF_M || Math.abs(p.z) > INNER_HALF_M) continue;
+      let pts = [];
+      for (let i = 1; i <= flat.length; i += 2) {
+        const end = i >= flat.length;
+        if (!end) toLocal(flat[i], flat[i + 1], 0, p);
+        if (end || Math.abs(p.x) > INNER_HALF_M || Math.abs(p.z) > INNER_HALF_M || this.keepClear(p.x, p.z)) {
+          this._addRoad(cls, pts);
+          pts = [];
+          continue;
+        }
         pts.push(new THREE.Vector3(p.x, Math.max(this.terrain.heightAt(p.x, p.z), 0) + ROAD_LIFT_M[cls], p.z));
       }
-      if (pts.length < 2) continue;
-      const cum = [0];
-      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
-      if (cum[cum.length - 1] < 50) continue;
-      this.roads.push({ cls, pts, cum, length: cum[cum.length - 1] });
     }
     this._paint();
     this._lamps();
     this._traffic();
+  }
+
+  _addRoad(cls, pts) {
+    if (pts.length < 2) return;
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    if (cum[cum.length - 1] < 50) return;
+    this.roads.push({ cls, pts, cum, length: cum[cum.length - 1] });
   }
 
   _paint() {

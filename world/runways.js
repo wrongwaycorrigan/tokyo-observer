@@ -86,6 +86,7 @@ export class Runways {
     this.group = new THREE.Group();
     this.count = 0;
     this.zones = [];
+    this.fields = [];
   }
 
   covers(x, z) {
@@ -94,13 +95,42 @@ export class Runways {
       const dz = z - k.cz;
       if (Math.abs(dx * k.ux + dz * k.uz) < k.halfLength && Math.abs(dx * k.uz - dz * k.ux) < k.halfWidth) return true;
     }
+    for (const f of this.fields) {
+      if (x < f.minX || x > f.maxX || z < f.minZ || z > f.maxZ) continue;
+      let inside = false;
+      for (const ring of f.rings) {
+        for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+          const zi = ring[i + 1];
+          const zj = ring[j + 1];
+          if ((zi > z) !== (zj > z) && x < ((ring[j] - ring[i]) * (z - zi)) / (zj - zi) + ring[i]) inside = !inside;
+        }
+      }
+      if (inside) return true;
+    }
     return false;
+  }
+
+  async loadFields() {
+    try {
+      const { airfields } = await (await fetch('./data/airfields.json')).json();
+      for (const a of airfields) {
+        const rings = a.rings.map((r) => Float32Array.from(r.flatMap(([lon, lat]) => {
+          const p = toLocal(lon, lat);
+          return [p.x, p.z];
+        })));
+        const xs = rings.flatMap((r) => [...r].filter((_, i) => i % 2 === 0));
+        const zs = rings.flatMap((r) => [...r].filter((_, i) => i % 2 === 1));
+        this.fields.push({ rings, minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) });
+      }
+    } catch (e) {
+      console.warn('[Runways] airfield boundaries unavailable', e);
+    }
   }
 
   async load() {
     register('runways', 'Runways', 'OurAirports (bundled)');
     try {
-      const [res] = await Promise.all([fetch('./data/runways.json'), fontReady]);
+      const [res] = await Promise.all([fetch('./data/runways.json'), fontReady, this.loadFields()]);
       const data = await res.json();
       const lamps = { edge: [], green: [], red: [] };
       for (const r of data.runways) this._add(r, lamps);

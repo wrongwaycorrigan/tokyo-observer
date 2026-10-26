@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'tokyo-observer-sources';
 
 const DEFAULTS = {
-  adsbUrl: 'http://192.168.1.14/tar1090/data/aircraft.json',
+  adsbUrl: '',
   aisKey: '',
   feeds: [],
 };

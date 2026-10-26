@@ -8,10 +8,6 @@ import { keepVisible, makeLabel, setInfo } from '../world/markers.js';
 
 const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 const MARINE_REFRESH_MS = 20 * 60_000;
-const TEMP_MIN_C = 10;
-const TEMP_MAX_C = 28;
-const COLD = new THREE.Color('#72f6ff');
-const WARM = new THREE.Color('#ff5ec8');
 
 const PORTS = [
   { name: 'Oi Container Terminal', port: 'Port of Tokyo', lat: 35.610, lon: 139.771, description: "One of the Port of Tokyo's largest container terminals." },
@@ -61,11 +57,6 @@ function snapToCoast(terrain, x, z) {
   return best ?? { x, z, facing: 0 };
 }
 
-function tempColor(t) {
-  if (!Number.isFinite(t)) return new THREE.Color(1, 1, 1);
-  return COLD.clone().lerp(WARM, THREE.MathUtils.clamp((t - TEMP_MIN_C) / (TEMP_MAX_C - TEMP_MIN_C), 0, 1)).lerp(new THREE.Color(1, 1, 1), 0.45);
-}
-
 async function refreshStation(t) {
   try {
     const params = new URLSearchParams({
@@ -81,9 +72,8 @@ async function refreshStation(t) {
     if (!c) return;
     const temp = c.sea_surface_temperature;
     const wave = c.wave_height;
-    t.mesh.material.uniforms.uTint.value.copy(tempColor(temp));
-    t.label.element.textContent = `${t.station.name.toUpperCase()} ${Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : ''}`;
-    setInfo(t.obj, `${t.station.name} tide station`, `Sea temp ${Number.isFinite(temp) ? `${temp.toFixed(1)}&deg;C` : 'unknown'}<br>Wave height ${Number.isFinite(wave) ? `${wave.toFixed(1)} m` : 'unknown'}<br>Conditions via Open-Meteo Marine`);
+    t.label.element.textContent = `${t.station.name.toUpperCase()} ${Number.isFinite(wave) ? `${wave.toFixed(1)}M WAVES` : ''}`;
+    setInfo(t.obj, `${t.station.name} tide station`, `Wave height ${Number.isFinite(wave) ? `${wave.toFixed(1)} m` : 'unknown'}<br>Sea temp ${Number.isFinite(temp) ? `${temp.toFixed(1)}&deg;C` : 'unknown'}<br>Conditions via Open-Meteo Marine`);
   } catch (e) {
     report('marine', false, e.message);
     console.warn('[Ports] marine fetch failed:', e.message);
@@ -100,7 +90,7 @@ export function init(ctx) {
     const pos = toLocal(p.lon, p.lat);
     const obj = new THREE.Object3D();
     obj.position.set(pos.x, ctx.terrain.heightAt(pos.x, pos.z) + 5, pos.z);
-    obj.add(makeLabel(`■ ${p.name.toUpperCase()}`, { className: 'label-port', maxDistance: 22_000 }));
+    obj.add(makeLabel(`⚓︎ ${p.name.toUpperCase()}`, { className: 'label-port', maxDistance: 22_000 }));
     setInfo(obj, p.name, `${p.port}<br>${p.description}`);
     group.add(obj);
   }
@@ -111,7 +101,7 @@ export function init(ctx) {
     const obj = new THREE.Group();
     obj.position.set(coast.x, 0, coast.z);
     obj.rotation.y = coast.facing;
-    const mesh = createModel('tideGauge', { tint: 0xffffff });
+    const mesh = createModel('tideGauge', { tint: 0x3a6ad8 });
     obj.add(mesh);
     const label = makeLabel(station.name.toUpperCase(), { className: 'label-sea', maxDistance: 30_000, offsetY: 12 });
     obj.add(label);

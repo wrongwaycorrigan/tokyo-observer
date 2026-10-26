@@ -44,7 +44,7 @@ export function init(ctx) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(lampPos, 3));
-  lightMaterial = new THREE.PointsMaterial({ color: 0xff3020, size: 5, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  lightMaterial = new THREE.PointsMaterial({ color: 0xff3020, size: 2, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   lights = new THREE.Points(g, lightMaterial);
   root.add(lights);
 }
