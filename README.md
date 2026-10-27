@@ -4,11 +4,9 @@
   <img src="screenshots/fuji-sunset.jpg" alt="Sunset beside Mt Fuji in Tokyo Observer" width="640">
 </p>
 
-A quiet, retro 90s window onto Tokyo Bay. Drift above a little polygon Tokyo
-built from open data as it follows the real clock and live weather: planes
-glide into Haneda, ships cross the bay, rain patters on the water, the moon
-rises over the city lights, and Japanese radio plays softly in the background.
-Leave it running, and let the bay keep you company.
+
+A retro simulation window onto Tokyo Bay. Drift above a little polygon Tokyo built from open data as it follows the real clock and live weather. Planes glide into Haneda, lighthouses guide ships cross the bay, rain patters on the water, the moon rises over the city lights, and Japanese radio plays softly in the background. Leave it running and let the bay keep you company.
+
 
 ## Run it
 
