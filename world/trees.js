@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { INNER_HALF_M, toLonLat } from './geo.js';
+import { INNER_HALF_M, edgeFade, toLonLat } from './geo.js';
 import { gouraudMaterial } from './shading.js';
 import { COVER } from './terrain.js';
 
@@ -72,6 +72,7 @@ export class Trees {
       for (let i = 0; i < steps; i++) {
         const x = -INNER_HALF_M + (i + 0.5 + (hash(i, j, 1) - 0.5) * 0.9) * GRID_M;
         const z = -INNER_HALF_M + (j + 0.5 + (hash(i, j, 2) - 0.5) * 0.9) * GRID_M;
+        if (hash(i, j, 15) > edgeFade(x, z)) continue;
         const { lon, lat } = toLonLat(x, z);
         const c = this.terrain.coverAt(lon, lat);
         const density = c === COVER.TREE ? 0.9 : c === COVER.MANGROVE ? 0.7 : c === COVER.SHRUB ? 0.35 : c === COVER.GRASS || c === COVER.CROP ? 0.04 : c === COVER.BUILT ? 0.025 : 0;

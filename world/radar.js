@@ -11,7 +11,7 @@ const CELL_M = 6_000;
 const MAX_CELLS = 120;
 const RADAR_HALF_M = 110_000;
 const CELL_BASE_M = 4_000;
-const CELL_OPACITY = 0.32;
+const CELL_OPACITY = 0.42;
 
 function loadImage(url) {
   return new Promise((resolve) => {
@@ -26,7 +26,7 @@ function loadImage(url) {
 export class Radar {
   constructor() {
     this.group = new THREE.Group();
-    this.cloudMaterial = gouraudMaterial({ vertexColors: false, specular: 0, opacity: CELL_OPACITY, tint: 0x6e7487, side: THREE.DoubleSide });
+    this.cloudMaterial = gouraudMaterial({ vertexColors: false, specular: 0, opacity: CELL_OPACITY, tint: 0x9aa0b4, side: THREE.DoubleSide });
     this.cloudMaterial.depthWrite = false;
     this.box = new THREE.BoxGeometry(1, 1, 1);
     this.cells = [];
@@ -103,8 +103,15 @@ export class Radar {
 
   update(camera) {
     const y = camera.position.y;
-    const level = THREE.MathUtils.smoothstep(Math.abs(y - (CELL_BASE_M + 500)), 300, 1800);
-    const above = 1 - 0.7 * THREE.MathUtils.smoothstep(y, CELL_BASE_M + 1200, CELL_BASE_M + 6000);
+    let near = Infinity;
+    for (const c of this.cells) {
+      const dx = Math.max(0, Math.abs(camera.position.x - c.position.x) - CELL_M / 2);
+      const dz = Math.max(0, Math.abs(camera.position.z - c.position.z) - CELL_M / 2);
+      near = Math.min(near, Math.hypot(dx, dz));
+    }
+    const inside = 1 - THREE.MathUtils.smoothstep(near, 300, 2500);
+    const level = 1 - inside * (1 - THREE.MathUtils.smoothstep(Math.abs(y - (CELL_BASE_M + 500)), 300, 1800));
+    const above = 1 - 0.25 * THREE.MathUtils.smoothstep(y, CELL_BASE_M + 1200, CELL_BASE_M + 6000);
     this.cloudMaterial.uniforms.uOpacity.value = CELL_OPACITY * Math.min(level, above);
   }
 

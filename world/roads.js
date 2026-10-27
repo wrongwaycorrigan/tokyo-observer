@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { INNER_HALF_M, toLocal } from './geo.js';
+import { INNER_HALF_M, edgeFade, toLocal } from './geo.js';
 import { SHARED, nightLightsMaterial } from './shading.js';
 import { register, report } from './sources.js';
 
@@ -95,6 +95,7 @@ export class Roads {
       const step = LAMP_SPACING_M[r.cls];
       for (let s = step / 2; s < r.length; s += step) {
         this._at(r, s, v);
+        if (Math.random() > edgeFade(v.x, v.z)) continue;
         pos.push(v.x, v.y + 3, v.z);
         col.push(LAMP.r, LAMP.g, LAMP.b);
       }

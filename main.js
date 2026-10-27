@@ -165,6 +165,7 @@ async function main() {
   stage('roads');
   const roads = new Roads(terrain, (x, z) => runways.covers(x, z));
   await roads.load().catch((e) => console.warn('[Roads] failed to load:', e.message));
+  terrain.featherEdge();
   scene.add(roads.group);
 
   const weather = new Weather(sky);

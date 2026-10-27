@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  INNER_HALF_M, OUTER_HALF_M, bboxForHalfSize, lonLatToTilePx, tileRange, toLonLat,
+  EDGE_FEATHER_M, INNER_HALF_M, OUTER_HALF_M, bboxForHalfSize, lonLatToTilePx, tileRange, toLonLat,
 } from './geo.js';
 import { gouraudMaterial } from './shading.js';
 import { register, report } from './sources.js';
@@ -318,5 +318,41 @@ export class Terrain {
 
   coverAt(lon, lat) {
     return this.inner.coverAt(lon, lat);
+  }
+
+  featherEdge() {
+    const inner = this.inner.texture.image;
+    const outer = this.outer.texture.image;
+    const n = inner.width;
+    const m = outer.width;
+    const band = Math.ceil((EDGE_FEATHER_M / (2 * this.inner.half)) * n);
+    const ictx = inner.getContext('2d');
+    const img = ictx.getImageData(0, 0, n, n);
+    const d = img.data;
+    const o = outer.getContext('2d').getImageData(0, 0, m, m).data;
+    const toOuter = (p) => ((-this.inner.half + (p + 0.5) * (2 * this.inner.half) / n + this.outer.half) / (2 * this.outer.half)) * m - 0.5;
+    const sample = (u, v, ch) => {
+      const x0 = Math.max(0, Math.min(m - 2, Math.floor(u)));
+      const y0 = Math.max(0, Math.min(m - 2, Math.floor(v)));
+      const fx = u - x0;
+      const fy = v - y0;
+      const at = (x, y) => o[(y * m + x) * 4 + ch];
+      return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+    };
+    for (let j = 0; j < n; j++) {
+      const dj = Math.min(j, n - 1 - j);
+      for (let i = 0; i < n; i++) {
+        const e = Math.min(dj, i, n - 1 - i);
+        if (e >= band) continue;
+        let t = e / band;
+        t = t * t * (3 - 2 * t);
+        const u = toOuter(i);
+        const v = toOuter(j);
+        const k = (j * n + i) * 4;
+        for (let ch = 0; ch < 3; ch++) d[k + ch] = sample(u, v, ch) * (1 - t) + d[k + ch] * t;
+      }
+    }
+    ictx.putImageData(img, 0, 0);
+    this.inner.texture.needsUpdate = true;
   }
 }

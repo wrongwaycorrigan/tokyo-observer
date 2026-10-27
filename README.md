@@ -4,9 +4,11 @@
   <img src="screenshots/fuji-sunset.jpg" alt="Sunset beside Mt Fuji in Tokyo Observer" width="640">
 </p>
 
-A retro 90s world simulator of Tokyo Bay. Orbit a polygon Tokyo built from
-open data, running on the real clock and live weather, with aircraft, ships,
-radio and more on the map.
+A quiet, retro 90s window onto Tokyo Bay. Drift above a little polygon Tokyo
+built from open data as it follows the real clock and live weather: planes
+glide into Haneda, ships cross the bay, rain patters on the water, the moon
+rises over the city lights, and Japanese radio plays softly in the background.
+Leave it running, and let the bay keep you company.
 
 ## Run it
 

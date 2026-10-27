@@ -69,10 +69,10 @@ export class Weather {
     this.clusters = [];
     const geo = new THREE.PlaneGeometry(1, 1);
     this.cloudMaterial = new THREE.ShaderMaterial({
-      uniforms: { uTint: { value: new THREE.Color(1, 1, 1) }, uTime: SHARED.uTime, uAlpha: { value: CLOUD_ALPHA } },
+      uniforms: { uTint: { value: new THREE.Color(1, 1, 1) }, uTime: SHARED.uTime, uAlpha: { value: CLOUD_ALPHA }, uSide: { value: 0 } },
       vertexShader: `varying vec2 vUv; varying vec3 vWorld; varying float vSeed;
         void main(){ vUv=uv; vec4 w=modelMatrix*vec4(position,1.0); vWorld=w.xyz; vSeed=fract(modelMatrix[3].x*0.00013+modelMatrix[3].z*0.00017); gl_Position=projectionMatrix*viewMatrix*w; }`,
-      fragmentShader: `uniform vec3 uTint; uniform float uTime; uniform float uAlpha; varying vec2 vUv; varying vec3 vWorld; varying float vSeed;
+      fragmentShader: `uniform vec3 uTint; uniform float uTime; uniform float uAlpha; uniform float uSide; varying vec2 vUv; varying vec3 vWorld; varying float vSeed;
         float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
         float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
         float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<4;i++){v+=a*n(p);p=p*2.03+vec2(1.7,9.2);a*=0.5;}return v;}
@@ -81,8 +81,11 @@ export class Weather {
           float r=length(c)*2.0;
           float body=fbm(vUv*3.0+vSeed*40.0+uTime*0.004);
           float a=smoothstep(0.24,0.56,body*(1.2-r*r));
-          float cam=smoothstep(600.0,4000.0,abs(cameraPosition.y-vWorld.y));
-          a*=uAlpha*cam;
+          vec3 toFrag=vWorld-cameraPosition;
+          float grazing=abs(normalize(toFrag).y);
+          float view=uSide>0.5?1.0-smoothstep(0.12,0.4,grazing):smoothstep(0.04,0.22,grazing);
+          float cam=smoothstep(800.0,5000.0,length(toFrag));
+          a*=uAlpha*cam*view;
           if(a<0.02) discard;
           gl_FragColor=vec4(uTint*(0.82+0.18*body),a);
         }
@@ -92,6 +95,12 @@ export class Weather {
       fog: false,
       side: THREE.DoubleSide,
     });
+
+    this.sideMaterial = this.cloudMaterial.clone();
+    this.sideMaterial.uniforms.uTint = this.cloudMaterial.uniforms.uTint;
+    this.sideMaterial.uniforms.uAlpha = this.cloudMaterial.uniforms.uAlpha;
+    this.sideMaterial.uniforms.uTime = SHARED.uTime;
+    this.sideMaterial.uniforms.uSide = { value: 1 };
 
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       const c = new THREE.Mesh(geo, this.cloudMaterial);
@@ -110,6 +119,12 @@ export class Weather {
       c.userData.windDrift = 0.7 + Math.random() * 0.8;
       this.group.add(c);
       this.clusters.push(c);
+      const side = new THREE.Mesh(geo, this.sideMaterial);
+      side.scale.set(r * shape * 0.9, r * 0.22, 1);
+      side.renderOrder = 3;
+      side.visible = false;
+      this.group.add(side);
+      c.userData.side = side;
     }
   }
 
@@ -185,6 +200,13 @@ export class Weather {
       if (c.position.x < -CLOUD_SPAN_M) c.position.x += 2 * CLOUD_SPAN_M;
       if (c.position.z > CLOUD_SPAN_M) c.position.z -= 2 * CLOUD_SPAN_M;
       if (c.position.z < -CLOUD_SPAN_M) c.position.z += 2 * CLOUD_SPAN_M;
+    }
+    for (const c of this.clusters) {
+      const side = c.userData.side;
+      side.visible = c.visible;
+      if (!c.visible) continue;
+      side.position.copy(c.position);
+      side.rotation.y = Math.atan2(camera.position.x - c.position.x, camera.position.z - c.position.z);
     }
 
     const precip = this.precipitation;

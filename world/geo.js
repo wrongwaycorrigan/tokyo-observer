@@ -1,6 +1,12 @@
 export const CENTER = { lon: 139.82, lat: 35.5 };
 
 export const INNER_HALF_M = 70_000;
+export const EDGE_FEATHER_M = 10_000;
+
+export function edgeFade(x, z) {
+  const t = Math.min(1, Math.max(0, (INNER_HALF_M - Math.max(Math.abs(x), Math.abs(z))) / EDGE_FEATHER_M));
+  return t * t * (3 - 2 * t);
+}
 
 export const OUTER_HALF_M = 220_000;
 

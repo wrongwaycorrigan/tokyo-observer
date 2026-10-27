@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { INNER_HALF_M, toLonLat, toLocal } from './geo.js';
+import { INNER_HALF_M, edgeFade, toLonLat, toLocal } from './geo.js';
 import { SHARED, gouraudMaterial, nightLightsMaterial } from './shading.js';
 import { COVER } from './terrain.js';
 import { createModel, createTower } from './models.js';
@@ -81,6 +81,7 @@ export class City {
         if (r < 0.18) continue;
         const x = -INNER_HALF_M + (i + 0.5 + (hash(i, j, 1) - 0.5) * 0.4) * GRID_M;
         const z = -INNER_HALF_M + (j + 0.5 + (hash(i, j, 2) - 0.5) * 0.4) * GRID_M;
+        if (hash(i, j, 9) > edgeFade(x, z)) continue;
         const { lon, lat } = toLonLat(x, z);
         if (this.terrain.coverAt(lon, lat) !== COVER.BUILT) continue;
         const ground = this.terrain.heightAt(x, z);

@@ -35,15 +35,19 @@ function finishPending() {
 export function startBoot() {
   screen = document.getElementById('boot');
   queue(async () => {
-    line('X68000 IPL-ROM Version 1.3');
+    line('SHARP X68000 EXPERT-HD');
     await wait(250);
     const mem = line('メモリチェック中 ... ');
-    for (let kb = 0; kb <= 12288; kb += 1024) {
+    for (let kb = 0; kb <= 2048; kb += 128) {
       mem.textContent = `メモリチェック中 ... ${String(kb).padStart(5)} KB`;
       await wait(35);
     }
     mem.textContent += ' OK';
-    line('SRAM 16KB   FDD0: 2HD   HDD0: SASI 40MB');
+    line('MPU : MC68000 10MHz');
+    line('RAM : 2048KB OK');
+    line('SRAM : 16KB');
+    line('GVRAM: 512KB TVRAM: 512KB');
+    line('FDD0 : 2HD 1.2MB FDD1 : 2HD 1.2MB');
     await wait(300);
     line();
     line('Observer68k version 3.02', 'bright');
