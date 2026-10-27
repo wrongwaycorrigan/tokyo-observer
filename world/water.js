@@ -12,6 +12,8 @@ const VERTEX = /* glsl */ `
 
 const FRAGMENT = /* glsl */ `
   uniform vec3 uSunDir;
+  uniform vec3 uMoonDir;
+  uniform float uMoonGlint;
   uniform vec3 uSunColor;
   uniform vec3 uAmbient;
   uniform vec3 uFogColor;
@@ -64,6 +66,8 @@ const FRAGMENT = /* glsl */ `
     vec3 c = mix(deep, uFogColor * vec3(1.0, 0.75, 1.0), fresnel * 0.4);
     float glint = pow(max(dot(reflect(-uSunDir, n), view), 0.0), 160.0);
     c += uSunColor * glint * 0.9;
+    float moonGlint = pow(max(dot(reflect(-normalize(uMoonDir), n), view), 0.0), 120.0);
+    c += vec3(0.9, 0.9, 0.82) * moonGlint * uMoonGlint * 0.75;
 
     float dist = length(cameraPosition - vWorld);
     float foam = surf(p, t, dist);

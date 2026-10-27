@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CENTER } from './geo.js';
 import { SHARED } from './shading.js';
+import { moonPosition } from './moon.js';
 
 const DEG = Math.PI / 180;
 
@@ -35,6 +36,8 @@ const FRAGMENT = /* glsl */ `
   uniform vec3 uSunPos;
   uniform float uNight;
   uniform float uOvercast;
+  uniform vec3 uMoonDir;
+  uniform float uMoonVis;
   varying vec3 vDir;
 
   void main() {
@@ -57,6 +60,21 @@ const FRAGMENT = /* glsl */ `
     c = mix(c, sunCol, vis);
     float glow = pow(max(dot(d, s), 0.0), 30.0) * 0.35 * (1.0 - uOvercast);
     c += vec3(1.0, 0.45, 0.7) * glow;
+
+    vec3 m = normalize(uMoonDir);
+    vec3 mr = normalize(cross(m, vec3(0.0, 1.0, 0.0)));
+    vec3 mu = cross(mr, m);
+    vec3 mrel = d - m * dot(d, m);
+    vec2 q = vec2(dot(mrel, mr), dot(mrel, mu)) / 0.032;
+    float q2 = dot(q, q);
+    if (q2 < 1.0 && dot(d, m) > 0.0) {
+      vec3 surf = mr * q.x + mu * q.y - m * sqrt(1.0 - q2);
+      float lit = smoothstep(-0.05, 0.08, dot(surf, s));
+      float mare = 0.88 + 0.12 * sin(q.x * 7.0 + 1.3) * sin(q.y * 6.0 - 0.7);
+      vec3 moonCol = mix(c + vec3(0.025, 0.025, 0.035), vec3(1.0, 0.96, 0.84) * mare, lit);
+      c = mix(c, moonCol, uMoonVis * step(-0.01, d.y));
+    }
+    c += vec3(0.85, 0.85, 0.75) * pow(max(dot(d, m), 0.0), 220.0) * 0.12 * uMoonVis;
 
     gl_FragColor = vec4(c, 1.0);
   }
@@ -93,6 +111,8 @@ export class Sky {
       uSunPos: { value: new THREE.Vector3(0, 1, 0) },
       uNight: SHARED.uNight,
       uOvercast: { value: 0 },
+      uMoonDir: SHARED.uMoonDir,
+      uMoonVis: { value: 0 },
     };
     this.mesh = new THREE.Mesh(
       new THREE.SphereGeometry(500_000, 32, 16),
@@ -121,6 +141,14 @@ export class Sky {
 
     const sel = elevation * DEG; const saz = azimuth * DEG;
     this.uniforms.uSunPos.value.set(Math.sin(saz) * Math.cos(sel), Math.sin(sel), -Math.cos(saz) * Math.cos(sel));
+
+    this.moon = moonPosition(this.now());
+    const mel = this.moon.elevation * DEG; const maz = this.moon.azimuth * DEG;
+    SHARED.uMoonDir.value.set(Math.sin(maz) * Math.cos(mel), Math.sin(mel), -Math.cos(maz) * Math.cos(mel));
+    const moonUp = THREE.MathUtils.smoothstep(this.moon.elevation, -1, 3);
+    const moonDaylight = THREE.MathUtils.smoothstep(elevation, -8, 10);
+    this.uniforms.uMoonVis.value = moonUp * (1 - this.overcast * 0.9) * (1 - 0.6 * moonDaylight);
+    SHARED.uMoonGlint.value = moonUp * (1 - moonDaylight) * (1 - this.overcast * 0.85) * (0.15 + 0.85 * this.moon.illumination);
 
     lerpKeys(elevation, 1, this.uniforms.uZenith.value);
     lerpKeys(elevation, 2, this.uniforms.uHorizon.value);

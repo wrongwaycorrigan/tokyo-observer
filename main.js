@@ -581,7 +581,7 @@ async function main() {
     const heading = ((Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z) * 180) / Math.PI + 180 + 360) % 360;
     const w = weather.state;
     const wx = w ? `${Math.round(w.temperature_2m)}°C ${describe(w.weather_code).toUpperCase()}` : 'WX ---';
-    const moon = moonPhase();
+    const moon = sky.moon ? { illuminationPct: Math.round(sky.moon.illumination * 100) } : moonPhase();
     const issText = iss.status.distanceKm == null ? 'ISS ---' : iss.status.visible ? `ISS OVERHEAD ${Math.round(iss.status.elevation)}°` : `ISS ${Math.round(iss.status.distanceKm).toLocaleString('en-US')}KM`;
     $('status-text').textContent = ` ${jst} JST │ ${phase} │ ${wx} │ ALT ${Math.round(altitude).toLocaleString('en-US')}M │ HDG ${String(Math.round(heading)).padStart(3, '0')} │ MOON ${moon.illuminationPct}% │ ${issText}${focusObj?.userData.info ? ` │ FOLLOW ${focusObj.userData.info.title.toUpperCase()}` : ''}`;
   }

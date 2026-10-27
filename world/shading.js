@@ -9,6 +9,8 @@ export const SHARED = {
   uFogFar: { value: 90_000 },
   uNight: { value: 0 },
   uTime: { value: 0 },
+  uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
+  uMoonGlint: { value: 0 },
 };
 
 const VERTEX = /* glsl */ `
@@ -26,9 +28,18 @@ const VERTEX = /* glsl */ `
     varying vec3 vWorldPos;
     varying vec3 vWorldNormal;
   #endif
+  #ifdef GLOW
+    attribute float aGlow;
+    varying float vGlow;
+    varying vec3 vLocal;
+  #endif
 
   void main() {
     vec4 local = vec4(position, 1.0);
+    #ifdef GLOW
+      vGlow = aGlow;
+      vLocal = position;
+    #endif
     vec3 nrm = normal;
     #ifdef USE_INSTANCING
       local = instanceMatrix * local;
@@ -78,6 +89,10 @@ const FRAGMENT = /* glsl */ `
     varying vec3 vWorldNormal;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   #endif
+  #ifdef GLOW
+    varying float vGlow;
+    varying vec3 vLocal;
+  #endif
 
   void main() {
     vec3 base = vColor * uTint;
@@ -102,6 +117,14 @@ const FRAGMENT = /* glsl */ `
       }
     #endif
 
+    #ifdef GLOW
+      if (vGlow > 0.5 && uNight > 0.05) {
+        vec2 cell = floor(vec2(vLocal.x + vLocal.z, vLocal.y) / vec2(1.6, 1.2));
+        float lit = step(0.35, fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453));
+        c += uNight * lit * vec3(1.0, 0.7, 0.3) * 0.62;
+      }
+    #endif
+
     gl_FragColor = vec4(mix(c, uFogColor, vFog), uOpacity);
   }
 `;
@@ -115,8 +138,10 @@ export function gouraudMaterial({
   specular = 0.35,
   opacity = 1,
   side = THREE.FrontSide,
+  glow = false,
 } = {}) {
   const defines = { SPECULAR: specular.toFixed(3) };
+  if (glow) defines.GLOW = '';
   if (map) defines.USE_MAP = '';
   if (building) defines.BUILDING = '';
   return new THREE.ShaderMaterial({

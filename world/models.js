@@ -3,11 +3,15 @@ import { gouraudMaterial } from './shading.js';
 
 const SEGMENTS = 10;
 
+let _windowRgb = null;
+const windowRgb = () => (_windowRgb ??= rgb(WINDOW));
+
 class Mesh {
   constructor() {
     this.pos = [];
     this.nrm = [];
     this.col = [];
+    this.glow = [];
     this.idx = [];
   }
 
@@ -15,6 +19,8 @@ class Mesh {
     this.pos.push(p[0], p[1], -p[2]);
     this.nrm.push(n[0], n[1], -n[2]);
     this.col.push(c[0], c[1], c[2]);
+    const w = windowRgb();
+    this.glow.push(c[0] === w[0] && c[1] === w[1] && c[2] === w[2] ? 1 : 0);
     return this.pos.length / 3 - 1;
   }
 
@@ -432,6 +438,7 @@ function toGeometry(m) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(m.pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(m.nrm, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(m.col, 3));
+  g.setAttribute('aGlow', new THREE.Float32BufferAttribute(m.glow, 1));
   g.setIndex(m.idx);
   g.computeBoundingSphere();
   return g;
@@ -479,7 +486,7 @@ export function createTower({ w, d, h, color, style = 'slab', spire = 0 }) {
     roofs.push([0, h + spire, 0]);
   }
   box(m, [0, 6, 0], [w * 1.5, 12, d * 1.4], darker(color, 0.9));
-  _sharedMaterial ??= gouraudMaterial({ side: THREE.DoubleSide });
+  _sharedMaterial ??= gouraudMaterial({ side: THREE.DoubleSide, glow: true });
   return { mesh: new THREE.Mesh(toGeometry(m), _sharedMaterial), beacons: roofs };
 }
 
@@ -506,6 +513,7 @@ export async function loadPlateau() {
         for (let k = 0; k < 3; k++) col.set(c, (t + k) * 3);
       }
       g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setAttribute('aGlow', new THREE.Float32BufferAttribute(new Float32Array(pos.count), 1));
       g.computeVertexNormals();
       g.computeBoundingSphere();
       _geometries.set(name, g);
@@ -541,15 +549,15 @@ export function airlinerGeometry(livery) {
 }
 
 export function createAirliner(livery, { tint } = {}) {
-  const material = gouraudMaterial({ tint: tint ?? 0xffffff, side: THREE.DoubleSide });
+  const material = gouraudMaterial({ tint: tint ?? 0xffffff, side: THREE.DoubleSide, glow: true });
   const mesh = new THREE.Mesh(airlinerGeometry(livery), material);
   mesh.userData.modelName = 'airliner';
   return mesh;
 }
 
 export function createModel(name, { tint } = {}) {
-  _sharedMaterial ??= gouraudMaterial({ side: THREE.DoubleSide });
-  const material = tint === undefined ? _sharedMaterial : gouraudMaterial({ tint, side: THREE.DoubleSide });
+  _sharedMaterial ??= gouraudMaterial({ side: THREE.DoubleSide, glow: true });
+  const material = tint === undefined ? _sharedMaterial : gouraudMaterial({ tint, side: THREE.DoubleSide, glow: true });
   const mesh = new THREE.Mesh(modelGeometry(name), material);
   mesh.userData.modelName = name;
   return mesh;
