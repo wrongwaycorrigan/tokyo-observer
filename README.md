@@ -1,5 +1,9 @@
 # Tokyo Observer
 
+<p align="center">
+  <img src="screenshots/fuji-sunset.jpg" alt="Sunset beside Mt Fuji in Tokyo Observer" width="640">
+</p>
+
 A retro 90s world simulator of Tokyo Bay. Orbit a polygon Tokyo built from
 open data, running on the real clock and live weather, with aircraft, ships,
 radio and more on the map.
