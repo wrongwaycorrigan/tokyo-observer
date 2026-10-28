@@ -7,6 +7,8 @@ import { SHARED } from '../world/shading.js';
 import { forget, keepVisible, makeLabel, setInfo } from '../world/markers.js';
 
 const REFRESH_MS = 5_000;
+const RELAY_URL = './adsb.json';
+let relayMissing = false;
 const STALE_MS = 30_000;
 const MAX_EXTRAPOLATE_S = 45;
 const MIN_BLEND_S = 2;
@@ -136,10 +138,19 @@ function prune() {
 
 async function refresh() {
   try {
-    if (!settings.adsbUrl) { report('adsb', null, 'no receiver URL'); return; }
-    const res = await fetch(settings.adsbUrl);
-    if (!res.ok) { report('adsb', false, `HTTP ${res.status}`); return; }
-    report('adsb', true);
+    const relay = !settings.adsbUrl;
+    if (relay && relayMissing) return;
+    const res = await fetch(relay ? RELAY_URL : settings.adsbUrl, { cache: 'no-store' });
+    if (!res.ok) {
+      if (relay) {
+        relayMissing = res.status === 404;
+        report('adsb', null, 'no receiver URL (or run tools/serve.py)');
+      } else {
+        report('adsb', false, `HTTP ${res.status}`);
+      }
+      return;
+    }
+    report('adsb', true, relay ? 'adsb.lol via local relay' : '');
     const data = await res.json();
     for (const ac of data.aircraft ?? data.ac ?? []) {
       if (Number.isFinite(ac.lat) && Number.isFinite(ac.lon) && ac.hex) upsert(ac);
@@ -153,7 +164,7 @@ async function refresh() {
 
 export function init(ctx) {
   register('adsb', 'Aircraft (ADS-B)', 'tar1090 / readsb aircraft.json');
-  onSettingsChange(() => { if (group.visible) refresh(); });
+  onSettingsChange(() => { relayMissing = false; if (group.visible) refresh(); });
   group = new THREE.Group();
   group.visible = false;
   ctx.scene.add(group);

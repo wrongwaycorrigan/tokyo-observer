@@ -58,6 +58,9 @@ export function updateMarkers(camera, viewportHeight) {
   }
   for (const label of labels) {
     if (!label.parent) continue;
+    let shown = true;
+    for (let o = label.parent; o; o = o.parent) if (!o.visible) { shown = false; break; }
+    if (!shown) { label.visible = false; continue; }
     label.getWorldPosition(_v);
     label.visible = _v.distanceTo(camera.position) < label.userData.maxDistance;
   }
@@ -66,8 +69,11 @@ export function updateMarkers(camera, viewportHeight) {
 const raycaster = new THREE.Raycaster();
 export function pick(camera, ndc, roots) {
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects(roots, true);
+  const hits = raycaster.intersectObjects(roots.filter((r) => r.visible), true);
   for (const h of hits) {
+    let hidden = false;
+    for (let p = h.object; p; p = p.parent) if (!p.visible) { hidden = true; break; }
+    if (hidden) continue;
     let o = h.object;
     while (o && !o.userData.info) o = o.userData.pickTarget ?? o.parent;
     if (o?.userData.info) return o;

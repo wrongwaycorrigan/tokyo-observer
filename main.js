@@ -181,7 +181,8 @@ async function main() {
 
   pickRoots.push(ports.alwaysOn(), ports.ships());
   pickRoots.push(feeds.init(ctx));
-  pickRoots.push(airports.init(ctx));
+  const airportsRoot = airports.init(ctx);
+  pickRoots.push(airportsRoot);
   const airQuality = new AirQuality(terrain);
   scene.add(airQuality.group);
   pickRoots.push(airQuality.group);
@@ -199,6 +200,7 @@ async function main() {
     const layer = LAYERS[key];
     layer.on = on;
     layer.module.setEnabled(on);
+    if (key === 'air') airportsRoot.visible = on;
     $(`menu-${key}`).classList.toggle('active', on);
     $(`panel-${key}`).classList.toggle('hidden', !on);
     updatePanels();
@@ -215,6 +217,7 @@ async function main() {
     try { localStorage.setItem(WX_KEY, on ? 'on' : 'off'); } catch {}
     $('panel-wx').classList.toggle('hidden', !on);
     $('menu-wx').classList.toggle('active', on);
+    airQuality.group.visible = on;
   }
   $('menu-wx').addEventListener('click', () => setWeatherPanel(!wxOn));
   setWeatherPanel(wxOn);
@@ -269,9 +272,23 @@ async function main() {
     $('src-feeds').appendChild(row);
     return row;
   }
+  const SOURCE_GROUPS = [
+    ['MAP DATA', ['terrain', 'runways', 'terminals', 'port', 'roads']],
+    ['AIR & SEA', ['adsb', 'metar', 'ais', 'marine', 'tide', 'iss']],
+    ['WEATHER & EARTH', ['weather', 'radar', 'jma-warnings', 'airquality', 'sondehub', 'usgs']],
+    ['RADIO', ['radio', 'wspr']],
+  ];
   function renderSourceTable() {
-    const label = { ok: 'OK', err: 'ERR', wait: '...', off: 'OFF' };
-    $('sources-table').innerHTML = sources().map((src) => `<tr><td class="st-${src.state}">&#9679; ${label[src.state]}</td><td>${escapeHtml(src.name.toUpperCase())}</td><td class="host">${escapeHtml(src.url)}</td><td class="detail">${escapeHtml(src.detail)}</td></tr>`).join('');
+    const all = sources();
+    const glyph = { ok: '&#9679;', err: '&#10005;', wait: '&#9675;', off: '&#183;' };
+    const row = (src) => `<div class="row ${src.state}" title="${escapeHtml(src.url)}"><span class="st-${src.state}">${glyph[src.state]}</span><span class="name">${escapeHtml(src.name.toUpperCase())}</span><span class="detail">${escapeHtml(src.detail || src.state.toUpperCase())}</span></div>`;
+    const grouped = new Set(SOURCE_GROUPS.flatMap(([, ids]) => ids));
+    const groups = SOURCE_GROUPS.map(([title, ids]) => [title, ids.map((id) => all.find((s) => s.id === id)).filter(Boolean)]);
+    groups.push(['CUSTOM FEEDS', all.filter((s) => !grouped.has(s.id))]);
+    $('sources-groups').innerHTML = groups.filter(([, list]) => list.length)
+      .map(([title, list]) => `<fieldset class="grp"><legend>${title}</legend>${list.map(row).join('')}</fieldset>`).join('');
+    const count = (st) => all.filter((s) => s.state === st).length;
+    $('src-summary').innerHTML = `<span class="st-ok">&#9679; ${count('ok')} OK</span><span class="st-off">&#183; ${count('off')} OFF</span><span class="st-err">&#10005; ${count('err')}</span>`;
   }
   function openSources() {
     $('crt-toggle').checked = crtEnabled();
@@ -313,6 +330,7 @@ async function main() {
     if (!$('sources').classList.contains('hidden')) renderSourceTable();
   }
   onSourcesChange(updateIndicator);
+  onSourcesChange(() => { if (!$('sources').classList.contains('hidden')) renderSourceTable(); });
   updateIndicator();
   $('menu-connect').addEventListener('click', () => ($('sources').classList.contains('hidden') ? openSources() : closeSources()));
   $('sources-close').addEventListener('click', closeSources);

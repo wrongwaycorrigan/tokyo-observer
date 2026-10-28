@@ -14,13 +14,19 @@ No install or build step. You need Python 3 (or any static file server) and
 an internet connection for the live data.
 
 ```
-git clone https://github.com/wrongwaycorrigan/tokyo_observer.git
-cd tokyo_observer
-python -m http.server 8000
+git clone https://github.com/wrongwaycorrigan/tokyo-observer.git
+cd tokyo-observer
 ```
 
-Open http://localhost:8000 in a desktop browser. Click once to start the
-sound.
+Then start a local web server in that folder:
+
+| System | Command |
+|---|---|
+| Windows | `python -m http.server 8000` (or `py -m http.server 8000`) |
+| macOS | `python3 -m http.server 8000` |
+| Linux | `python3 -m http.server 8000` |
+
+Open http://localhost:8000
 
 ## Connect your own data (optional)
 
@@ -43,15 +49,16 @@ Settings stay in your browser.
 
 ## Data
 
-Open-Meteo, RainViewer, VATSIM METAR, JMA, aisstream.io, SondeHub, wspr.live,
-USGS, wheretheiss.at, radio-browser.info, AWS Terrain Tiles, ESA WorldCover,
-OpenStreetMap, OurAirports and the Yale Bright Star Catalogue.
+Open-Meteo, RainViewer, VATSIM METAR, JMA, aisstream.io, adsb.lol, SondeHub,
+wspr.live, USGS, wheretheiss.at, radio-browser.info, AWS Terrain Tiles, ESA
+WorldCover, OpenStreetMap, OurAirports and the Yale Bright Star Catalogue.
 
 ## Credits
 
 - three.js (MIT)
 - Roads, airport boundaries, terminals and port buildings (c) OpenStreetMap contributors, ODbL; runways from OurAirports
 - Skytree and Tokyo Tower geometry: PLATEAU (MLIT Japan), CC BY 4.0
+- Aircraft without a receiver: adsb.lol via `tools/serve.py` (ODbL)
 - Stars: Yale Bright Star Catalogue, 5th ed. (Hoffleit & Warren), via CDS
 - Land cover: ESA WorldCover (CC BY 4.0); weather: Open-Meteo (CC BY 4.0)
 - DotGothic16 font by Fontworks (SIL OFL), via Google Fonts

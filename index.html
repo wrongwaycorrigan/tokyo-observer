@@ -314,7 +314,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 720px;
+      width: 1040px;
       max-width: calc(100% - 32px);
       max-height: calc(100% - 64px);
       overflow: auto;
@@ -327,12 +327,19 @@
     #panel-radio .close-x { background: #000000; color: #6ae8f1; }
     #sources fieldset { border: 1px solid var(--edge); padding: 8px 10px 10px; margin: 0 0 14px; min-width: 0; }
     #sources legend { color: var(--accent); padding: 0 6px; }
-    #sources table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    #sources col.c-state { width: 64px; }
-    #sources col.c-name { width: 200px; }
-    #sources col.c-detail { width: 150px; }
-    #sources td { padding: 0 8px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #sources td.host, #sources td.detail { color: var(--muted); }
+    #sources .cfg-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; }
+    #sources .cfg-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--edge); margin: 0 0 10px; padding-bottom: 4px; }
+    #sources .cfg-title { color: var(--text); letter-spacing: 1px; }
+    #src-summary span { margin-left: 10px; }
+    #sources .grp { border: 1px solid var(--edge); padding: 4px 8px 6px; margin: 0 0 10px; }
+    #sources .grp legend { font-size: 14px; }
+    #sources .row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: center; height: 19px; }
+    #sources .row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sources .row .detail { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; text-align: right; font-size: 14px; }
+    #sources .row.off .name { color: var(--muted); }
+    #sources .cfg-settings .field { grid-template-columns: 150px 1fr; }
+    #sources .cfg-settings .feed-row, #sources .cfg-settings .feed-head { grid-template-columns: 100px 1fr 52px 30px; }
+    @media (max-width: 760px) { #sources .cfg-grid { grid-template-columns: 1fr; } }
     #sources .st-ok { color: #7ddfc5; }
     #sources .st-err { color: var(--label-quake); }
     #sources .st-wait { color: var(--accent); }
@@ -417,10 +424,13 @@
 
   <div id="sources" class="window hidden" role="dialog" aria-label="Settings">
     <button id="sources-close" class="close-x" title="Close (Esc)">[&#9632;]</button>
-    <fieldset>
-      <legend>STATUS</legend>
-      <table><colgroup><col class="c-state"><col class="c-name"><col><col class="c-detail"></colgroup><tbody id="sources-table"></tbody></table>
-    </fieldset>
+    <div class="cfg-grid">
+    <section class="cfg-col cfg-status" aria-label="Status">
+      <div class="cfg-head"><span class="cfg-title">STATUS &#29366;&#24907;</span><span id="src-summary"></span></div>
+      <div id="sources-groups"></div>
+    </section>
+    <section class="cfg-col cfg-settings" aria-label="Settings">
+      <div class="cfg-head"><span class="cfg-title">SETTINGS &#35373;&#23450;</span></div>
     <fieldset>
       <legend>CONNECT</legend>
       <label class="field" for="src-adsb"><span>AIRCRAFT<small>tar1090 / readsb aircraft.json</small></span>
@@ -443,6 +453,8 @@
       <div id="src-feeds"></div>
       <div class="feed-tools"><button class="dosbtn" id="src-add">+ <span class="hk">A</span>dd feed</button></div>
     </fieldset>
+    </section>
+    </div>
     <div class="footer">
       <span class="hint" id="src-note">Stored in this browser only.</span>
       <button class="dosbtn" id="src-apply">A<span class="hk">p</span>ply</button>
