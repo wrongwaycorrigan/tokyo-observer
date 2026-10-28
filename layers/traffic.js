@@ -28,6 +28,9 @@ const LIGHTS = [
 ];
 const lightColors = LIGHTS.map((l) => new THREE.Color(l[4]));
 
+const ROTORCRAFT = /^(A109|A119|A129|A139|A149|A169|A189|ALO2|ALO3|AS32|AS3B|AS50|AS55|AS65|B06|B06T|B105|B212|B230|B222|B407|B412|B427|B429|B430|B47G|B505|BK17|EC20|EC25|EC30|EC35|EC45|EC55|EC75|EH10|EXPL|H125|H130|H135|H145|H155|H160|H175|H47|H500|H53|H53S|H60|H64|K126|KMAX|MD52|MD60|MI8|MI17|NH90|PUMA|R22|R44|R66|S61|S64|S76|S92|SUCO|TIGR|UH1|UH1Y|V22|V280|AH1)$/;
+const isRotorcraft = (ac) => ac.category === 'A7' || ROTORCRAFT.test(ac.t ?? '');
+
 const LIGHT_VERTEX = /* glsl */ `
   uniform float uNight;
   varying vec3 vColor;
@@ -153,7 +156,7 @@ async function refresh() {
     report('adsb', true, relay ? 'adsb.lol via local relay' : '');
     const data = await res.json();
     for (const ac of data.aircraft ?? data.ac ?? []) {
-      if (Number.isFinite(ac.lat) && Number.isFinite(ac.lon) && ac.hex) upsert(ac);
+      if (Number.isFinite(ac.lat) && Number.isFinite(ac.lon) && ac.hex && !isRotorcraft(ac)) upsert(ac);
     }
     prune();
   } catch (e) {
@@ -202,6 +205,20 @@ export function setEnabled(on) {
     clearInterval(timer);
     timer = null;
   }
+}
+
+const _p = new THREE.Vector3();
+export function pickNear(camera, ndc, maxPx, width, height) {
+  if (!group.visible) return null;
+  let best = null;
+  let bestD = maxPx;
+  for (const a of aircraft.values()) {
+    _p.copy(a.obj.position).project(camera);
+    if (_p.z < -1 || _p.z > 1) continue;
+    const d = Math.hypot(((_p.x - ndc.x) * width) / 2, ((_p.y - ndc.y) * height) / 2);
+    if (d < bestD) { bestD = d; best = a.obj; }
+  }
+  return best;
 }
 
 export function getCount() {

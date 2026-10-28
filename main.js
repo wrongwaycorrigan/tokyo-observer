@@ -74,8 +74,7 @@ async function main() {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xffffff, 1, 2);
-  const camera = new THREE.PerspectiveCamera(50, 1, 5, 1_200_000);
-  camera.position.copy(START_POSITION);
+  const camera = new THREE.PerspectiveCamera(50, 1, 5, 1_200_000);  camera.position.copy(START_POSITION);
   const post = new PostPass(renderer);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -494,7 +493,7 @@ async function main() {
   renderer.domElement.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
     const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-    const hit = pick(camera, ndc, pickRoots.filter((r) => r.visible));
+    const hit = traffic.pickNear(camera, ndc, 28, window.innerWidth, window.innerHeight) ?? pick(camera, ndc, pickRoots.filter((r) => r.visible));
     if (hit) setFocus(hit); else showInfo(null);
   });
   renderer.domElement.addEventListener('wheel', () => { zoomTo = null; }, { passive: true });
