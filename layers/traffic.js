@@ -100,7 +100,7 @@ function upsert(ac) {
     const livery = airlineOf(callsign);
     const mesh = createAirliner(livery, { tint: livery ? 0xffffff : tint.getHex() });
     obj.add(mesh);
-    const label = makeLabel(callsign, { className: 'label-air', maxDistance: 40_000, offsetY: 22 });
+    const label = makeLabel(callsign, { className: 'label-air', maxDistance: 40_000, offsetY: 22, priority: 0 });
     obj.add(label);
     const lights = makeLights();
     mesh.add(lights);
@@ -147,7 +147,7 @@ async function refresh() {
     if (!res.ok) {
       if (relay) {
         relayMissing = res.status === 404;
-        report('adsb', null, 'no receiver URL (or run tools/serve.py)');
+        report('adsb', null, 'relay off · run serve.py');
       } else {
         report('adsb', false, `HTTP ${res.status}`);
       }

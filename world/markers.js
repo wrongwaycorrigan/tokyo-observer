@@ -19,7 +19,7 @@ export function forget(obj) {
 let labelClick = () => {};
 export function onLabelClick(fn) { labelClick = fn; }
 
-export function makeLabel(text, { className = '', maxDistance = Infinity, offsetY = 0, onClick = null } = {}) {
+export function makeLabel(text, { className = '', maxDistance = Infinity, offsetY = 0, onClick = null, priority = 1 } = {}) {
   const el = document.createElement('div');
   el.className = `map-label ${className}`;
   el.textContent = text;
@@ -35,6 +35,7 @@ export function makeLabel(text, { className = '', maxDistance = Infinity, offset
   });
   label.position.y = offsetY;
   label.userData.maxDistance = maxDistance;
+  label.userData.priority = priority;
   labels.add(label);
   return label;
 }
@@ -56,14 +57,45 @@ export function updateMarkers(camera, viewportHeight) {
     const grow = dist > reach ? (dist / reach) ** 0.7 : 1;
     obj.scale.setScalar(Math.min(maxScale, baseScale * grow));
   }
+  const width = viewportHeight * camera.aspect;
+  const shown = [];
   for (const label of labels) {
     if (!label.parent) continue;
-    let shown = true;
-    for (let o = label.parent; o; o = o.parent) if (!o.visible) { shown = false; break; }
-    if (!shown) { label.visible = false; continue; }
+    label.visible = false;
+    let on = true;
+    for (let o = label.parent; o; o = o.parent) if (!o.visible) { on = false; break; }
+    if (!on) continue;
     label.getWorldPosition(_v);
-    label.visible = _v.distanceTo(camera.position) < label.userData.maxDistance;
+    const dist = _v.distanceTo(camera.position);
+    if (dist >= label.userData.maxDistance) continue;
+    _v.project(camera);
+    if (_v.z < -1 || _v.z > 1 || Math.abs(_v.x) > 1.2 || Math.abs(_v.y) > 1.2) continue;
+    shown.push({ label, dist: label.userData.placed ? dist * 0.7 : dist, x: ((_v.x + 1) / 2) * width, y: ((1 - _v.y) / 2) * viewportHeight - 12 });
   }
+  shown.sort((a, b) => b.label.userData.priority - a.label.userData.priority || a.dist - b.dist);
+  const placed = [];
+  for (const s of shown) {
+    const { w, h } = labelSize(s.label);
+    const box = [s.x - w / 2 - LABEL_GAP, s.y - h / 2 - LABEL_GAP, s.x + w / 2 + LABEL_GAP, s.y + h / 2 + LABEL_GAP];
+    s.label.userData.placed = !placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1]);
+    if (!s.label.userData.placed) continue;
+    placed.push(box);
+    s.label.visible = true;
+  }
+}
+
+const LABEL_GAP = 2;
+function labelSize(label) {
+  const el = label.element;
+  const text = el.textContent;
+  const c = label.userData.size;
+  if (c && c.text.length === text.length && c.measured) return c;
+  const w = el.offsetWidth;
+  const size = w > 0
+    ? { text, w, h: el.offsetHeight, measured: true }
+    : { text, w: [...text].reduce((n, ch) => n + (ch.charCodeAt(0) > 0x2000 ? 16 : 8), 0), h: 18, measured: false };
+  label.userData.size = size;
+  return size;
 }
 
 const raycaster = new THREE.Raycaster();

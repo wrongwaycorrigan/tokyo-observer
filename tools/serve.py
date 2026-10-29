@@ -10,21 +10,33 @@ import urllib.request
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 FEED_URL = 'https://api.adsb.lol/v2/point/35.55/139.80/90'
 FEED_PATH = '/adsb.json'
-CACHE_S = 4
+CACHE_S = 15
+BACKOFF_S = 30
+STALE_S = 120
 
 _lock = threading.Lock()
-_cache = {'at': 0.0, 'body': None}
+_cache = {'at': 0.0, 'body': None, 'retry': 0.0}
 
 
 def feed():
     with _lock:
-        if _cache['body'] is not None and time.time() - _cache['at'] < CACHE_S:
+        now = time.time()
+        age = now - _cache['at']
+        if _cache['body'] is not None and (age < CACHE_S or (now < _cache['retry'] and age < STALE_S)):
             return _cache['body']
-        req = urllib.request.Request(FEED_URL, headers={'User-Agent': 'tokyo-observer-relay', 'Accept': 'application/json'})
-        with urllib.request.urlopen(req, timeout=15) as res:
-            data = json.load(res)
+        if now < _cache['retry']:
+            raise RuntimeError('backing off')
+        try:
+            req = urllib.request.Request(FEED_URL, headers={'User-Agent': 'tokyo-observer-relay', 'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=15) as res:
+                data = json.load(res)
+        except Exception:
+            _cache['retry'] = now + BACKOFF_S
+            if _cache['body'] is not None and now - _cache['at'] < STALE_S:
+                return _cache['body']
+            raise
         body = json.dumps({'source': 'adsb.lol (ODbL)', 'now': data.get('now'), 'aircraft': data.get('ac') or []}).encode()
-        _cache.update(at=time.time(), body=body)
+        _cache.update(at=now, body=body, retry=0.0)
         return body
 
 
@@ -52,7 +64,7 @@ def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     handler = functools.partial(Handler, directory=ROOT)
     server = http.server.ThreadingHTTPServer(('127.0.0.1', port), handler)
-    print(f'Tokyo Observer on http://localhost:{port}  (aircraft relayed from adsb.lol)')
+    print(f'Tokyo Observer on http://localhost:{port}')
     try:
         server.serve_forever()
     except KeyboardInterrupt:

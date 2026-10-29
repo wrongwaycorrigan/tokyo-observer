@@ -18,15 +18,19 @@ git clone https://github.com/wrongwaycorrigan/tokyo-observer.git
 cd tokyo-observer
 ```
 
-Then start a local web server in that folder:
+Then start the local server in that folder:
 
 | System | Command |
 |---|---|
-| Windows | `python -m http.server 8000` (or `py -m http.server 8000`) |
-| macOS | `python3 -m http.server 8000` |
-| Linux | `python3 -m http.server 8000` |
+| Windows | `python tools/serve.py` (or `py tools/serve.py`) |
+| macOS | `python3 tools/serve.py` |
+| Linux | `python3 tools/serve.py` |
 
 Open http://localhost:8000
+
+`tools/serve.py` also relays live aircraft from adsb.lol. Any static file server
+(such as `python -m http.server 8000`) works too, but shows aircraft only if you
+connect your own receiver.
 
 ## Connect your own data (optional)
 
@@ -35,7 +39,7 @@ Many live data sources are already connected to Tokyo Observer.
 Click **⛯** settings gear at the top right of the menu bar to view their status or add your own. 
 
 - **Ships:** paste a free API key from https://aisstream.io
-- **Aircraft:** the URL of your tar1090/readsb `aircraft.json`
+- **Aircraft:** the URL of your tar1090/readsb `aircraft.json` (leave blank for adsb.lol)
 - **Custom feeds:** any GeoJSON or JSON list of points with lat/lon
 
 Settings stay in your browser.

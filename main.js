@@ -574,7 +574,8 @@ async function main() {
       const bayNear = 1 - THREE.MathUtils.smoothstep(Math.hypot(controls.target.x, controls.target.z), 4_000, 45_000);
       const height = 1 - 0.7 * THREE.MathUtils.smoothstep(above, 1_500, 60_000);
       const raining = weather.rain.visible ? THREE.MathUtils.clamp(0.35 + weather.precipitation / 4, 0, 1) : 0;
-      const rainSound = RAIN_AUDITION >= 0 ? RAIN_AUDITION : raining * (1 - THREE.MathUtils.smoothstep(above, 1_500, 3_000));
+      const cellRain = radar.group.visible ? radar.rainNear(camera.position.x, camera.position.z) * (1 - THREE.MathUtils.smoothstep(camera.position.y, 3_000, 5_000)) : 0;
+      const rainSound = RAIN_AUDITION >= 0 ? RAIN_AUDITION : Math.max(raining * (1 - THREE.MathUtils.smoothstep(above, 1_500, 3_000)), cellRain);
       ambience.update({ proximity: THREE.MathUtils.clamp((0.6 * s.water + 0.4 * bayNear) * height, 0, 1), altitude: above, rain: rainSound });
       updateStatus(above);
       hideLabelsUnderWindows();

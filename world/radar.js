@@ -127,6 +127,17 @@ export class Radar {
     return best;
   }
 
+  rainNear(x, z, reach = 3_000) {
+    let best = 0;
+    for (const c of this.cells) {
+      const dx = Math.max(0, Math.abs(x - c.position.x) - CELL_M / 2);
+      const dz = Math.max(0, Math.abs(z - c.position.z) - CELL_M / 2);
+      const near = 1 - THREE.MathUtils.smoothstep(Math.hypot(dx, dz), 0, reach);
+      best = Math.max(best, near * (0.35 + 0.65 * c.userData.strength));
+    }
+    return best;
+  }
+
   start() {
     register('radar', 'Rain radar', 'api.rainviewer.com');
     this.refresh();

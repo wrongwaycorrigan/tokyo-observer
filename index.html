@@ -360,6 +360,7 @@
       min-width: 0;
     }
     #sources input:focus { outline: 1px solid var(--select); }
+    #sources input::placeholder { color: var(--status); opacity: 1; }
     #sources .feed-row, #sources .feed-head { display: grid; grid-template-columns: 150px 1fr 64px 34px; gap: 8px; margin: 6px 0; align-items: center; }
     #sources .feed-head { color: var(--muted); margin-top: 8px; }
     #sources .hint { color: var(--muted); }
@@ -434,7 +435,7 @@
     <fieldset>
       <legend>CONNECT</legend>
       <label class="field" for="src-adsb"><span>AIRCRAFT<small>tar1090 / readsb aircraft.json</small></span>
-        <input id="src-adsb" type="url" spellcheck="false" placeholder="http://receiver/tar1090/data/aircraft.json">
+        <input id="src-adsb" type="url" spellcheck="false" placeholder="blank = adsb.lol relay">
       </label>
       <label class="field" for="src-ais"><span>SHIPS<small>aisstream.io API key</small></span>
         <input id="src-ais" type="password" spellcheck="false" autocomplete="off" placeholder="paste key">
