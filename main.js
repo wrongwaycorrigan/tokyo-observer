@@ -365,6 +365,14 @@ async function main() {
     }
     $('info-title').textContent = obj.userData.info.title;
     $('info-body').innerHTML = obj.userData.info.body;
+    const { action } = obj.userData.info;
+    if (action) {
+      const btn = document.createElement('button');
+      btn.className = 'info-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', action.run);
+      $('info-body').append(btn);
+    }
     $('info').classList.remove('hidden');
   }
   let focusObj = null;

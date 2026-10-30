@@ -150,7 +150,8 @@ export class City {
     this.group.add(this.lights);
 
     for (const l of LANDMARKS) {
-      const mesh = createModel(l.model);
+      const mesh = l.model === 'tokyoTower' ? createModel(l.model, { tint: 0xffffff }) : createModel(l.model);
+      if (l.model === 'tokyoTower') this.floodlit = mesh.material;
       const pos = toLocal(l.lon, l.lat);
       mesh.position.set(pos.x, this.terrain.heightAt(pos.x, pos.z), pos.z);
       mesh.userData.info = { title: l.name, body: l.note };
@@ -178,5 +179,9 @@ export class City {
       chunk.visible = chunk.userData.center.distanceTo(camera.position) < reach;
     }
     this.lightMaterial.uniforms.uOpacity.value = THREE.MathUtils.smoothstep(SHARED.uNight.value, 0.25, 0.75);
+    if (this.floodlit) {
+      const lit = THREE.MathUtils.smoothstep(SHARED.uNight.value, 0.2, 0.8);
+      this.floodlit.uniforms.uSelfLit.value = 0.7 * lit;
+    }
   }
 }

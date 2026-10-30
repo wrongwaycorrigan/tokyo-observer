@@ -40,8 +40,8 @@ export function makeLabel(text, { className = '', maxDistance = Infinity, offset
   return label;
 }
 
-export function setInfo(obj, title, body = '') {
-  obj.userData.info = { title, body };
+export function setInfo(obj, title, body = '', action = null) {
+  obj.userData.info = { title, body, action };
   obj.traverse((o) => { o.userData.pickTarget = obj; });
   return obj;
 }

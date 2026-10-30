@@ -339,6 +339,19 @@ async function loadStations() {
   }
 }
 
+function tune(stream, obj = null) {
+  let s = all.find((x) => x.url_resolved === stream.url_resolved);
+  if (!s) {
+    s = { ...stream };
+    all.push(s);
+  }
+  band = 'NET';
+  cursor = all.indexOf(s);
+  renderList();
+  if (s !== playing || !isPlaying()) play(s);
+  if (obj) focusHandler(obj);
+}
+
 export function onFocus(fn) {
   focusHandler = fn;
 }
@@ -385,7 +398,7 @@ export function init(ctx) {
 
   loadStations();
   wspr.init(ctx);
-  towers.init(ctx);
+  towers.init(ctx, tune);
   group.add(towers.group());
   render();
   updateSpectrum(0);

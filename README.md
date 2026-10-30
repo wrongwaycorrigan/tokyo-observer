@@ -38,17 +38,16 @@ Many live data sources are already connected to Tokyo Observer.
 
 Click **⛯** settings gear at the top right of the menu bar to view their status or add your own. 
 
-- **Ships:** paste a free API key from https://aisstream.io
-- **Aircraft:** the URL of your tar1090/readsb `aircraft.json` (leave blank for adsb.lol)
-- **Custom feeds:** any GeoJSON or JSON list of points with lat/lon
+- **Aircraft:** Live air traffic will fly over the bay. If you have your own ADSB receiver you can use your own feed.
+- **Ships:** Populate the water with live ship traffic using a free API key from https://aisstream.io
+- **Bring your own data:** GeoJSON and JSON latitude/longitude data is supported. 
 
 Settings stay in your browser.
 
 ## Controls
 
 - Drag to orbit, scroll to zoom, right-drag to pan
-- Click anything to fly to it and follow it; click TOKYO OBSERVER to return
-- Menu hotkeys: A, S, O, B, Q toggle layers; L opens LINK; H goes home
+- Click TOKYO OBSERVER to return to wide bay view
 - Add `?hours=6` to the URL to preview another time of day
 
 ## Data

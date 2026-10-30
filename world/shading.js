@@ -78,6 +78,7 @@ const FRAGMENT = /* glsl */ `
   uniform float uNight;
   uniform float uOpacity;
   uniform vec3 uEmissive;
+  uniform float uSelfLit;
   uniform sampler2D map;
   varying vec3 vLight;
   varying float vSpec;
@@ -118,6 +119,10 @@ const FRAGMENT = /* glsl */ `
     #endif
 
     #ifdef GLOW
+      if (uSelfLit > 0.0) {
+        float rise = clamp(vLocal.y / 330.0, 0.0, 1.0);
+        c += base * vec3(1.0, 0.72, 0.42) * uSelfLit * pow(1.0 - rise, 2.2);
+      }
       if (vGlow > 0.5 && uNight > 0.05) {
         vec2 cell = floor(vec2(vLocal.x + vLocal.z, vLocal.y) / vec2(1.6, 1.2));
         float lit = step(0.35, fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453));
@@ -156,6 +161,7 @@ export function gouraudMaterial({
       map: { value: map },
       uTint: { value: new THREE.Color(tint) },
       uEmissive: { value: new THREE.Color(emissive) },
+      uSelfLit: { value: 0 },
       uOpacity: { value: opacity },
     },
   });
