@@ -33,7 +33,6 @@ let lighthouse = null;
 let shipRoot = null;
 let marineTimer = null;
 const tides = [];
-let staticCount = 0;
 
 function snapToCoast(terrain, x, z) {
   let best = null;
@@ -114,7 +113,6 @@ export function init(ctx) {
   lighthouse = new Lighthouse(ctx);
   ctx.scene.add(lighthouse.group);
 
-  staticCount = PORTS.length + TIDE_STATIONS.length;
   shipRoot = ais.init(ctx);
   return group;
 }
@@ -146,5 +144,5 @@ export function alwaysOn() {
 }
 
 export function getCount() {
-  return staticCount + ais.getCount();
+  return ais.getCount();
 }

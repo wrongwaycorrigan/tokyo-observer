@@ -30,6 +30,8 @@ const lightColors = LIGHTS.map((l) => new THREE.Color(l[4]));
 
 const ROTORCRAFT = /^(A109|A119|A129|A139|A149|A169|A189|ALO2|ALO3|AS32|AS3B|AS50|AS55|AS65|B06|B06T|B105|B212|B230|B222|B407|B412|B427|B429|B430|B47G|B505|BK17|EC20|EC25|EC30|EC35|EC45|EC55|EC75|EH10|EXPL|H125|H130|H135|H145|H155|H160|H175|H47|H500|H53|H53S|H60|H64|K126|KMAX|MD52|MD60|MI8|MI17|NH90|PUMA|R22|R44|R66|S61|S64|S76|S92|SUCO|TIGR|UH1|UH1Y|V22|V280|AH1)$/;
 const isRotorcraft = (ac) => ac.category === 'A7' || ROTORCRAFT.test(ac.t ?? '');
+const ICAO_CALLSIGN = /^([A-Z]{3}[0-9][0-9A-Z]{0,3}|JA[0-9][0-9A-Z]{3})$/;
+const hasCallsign = (ac) => ICAO_CALLSIGN.test((ac.flight ?? '').trim());
 
 const LIGHT_VERTEX = /* glsl */ `
   uniform float uNight;
@@ -124,7 +126,7 @@ function upsert(ac) {
     if (a.livery) a.mesh.geometry = airlinerGeometry(a.livery);
   }
   a.mesh.material.uniforms.uTint.value.copy(a.livery ? WHITE : tint);
-  a.label.element.textContent = `${callsign} ${Math.round(altFt / 100).toString().padStart(3, '0')}`;
+  a.label.element.textContent = callsign;
   setInfo(a.obj, callsign || 'Unknown', `${a.livery ? `${a.livery.name}<br>` : ''}${ac.t ? `${ac.t}<br>` : ''}Altitude ${Math.round(altFt)} ft<br>Speed ${Math.round(ac.gs ?? 0)} kt<br>Track ${Math.round(ac.track ?? 0)}&deg;`);
   a.lastUpdate = Date.now();
 }
@@ -156,7 +158,7 @@ async function refresh() {
     report('adsb', true, relay ? 'adsb.lol via local relay' : '');
     const data = await res.json();
     for (const ac of data.aircraft ?? data.ac ?? []) {
-      if (Number.isFinite(ac.lat) && Number.isFinite(ac.lon) && ac.hex && !isRotorcraft(ac)) upsert(ac);
+      if (Number.isFinite(ac.lat) && Number.isFinite(ac.lon) && ac.hex && hasCallsign(ac) && !isRotorcraft(ac)) upsert(ac);
     }
     prune();
   } catch (e) {

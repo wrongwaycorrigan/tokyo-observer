@@ -22,6 +22,12 @@ const RAMPS = [
 const LUT_SIZE = 32;
 const MAX_WIDTH = 800;
 const MAX_HEIGHT = 600;
+const PC98_FIXED = ['#000000', '#ffffff', '#ffbb55', '#ff55aa'];
+const PC98_SEED = ['#221144', '#443377', '#6655aa', '#9977dd', '#cc88cc', '#ffaacc', '#ffddaa', '#66ccdd', '#336699', '#224455', '#558866', '#aaaaaa'];
+const PC98_SAMPLE = [80, 60];
+const PC98_EVERY_MS = 1500;
+const DITHER = { 256: 0.09, pc98: 0.16 };
+const STORAGE_KEY = 'tokyo-observer-palette';
 
 function buildPalette() {
   const colors = [];
@@ -61,11 +67,38 @@ function buildLut(palette) {
   return tex;
 }
 
+function quantize4(c) {
+  return new THREE.Color(Math.round(c.r * 15) / 15, Math.round(c.g * 15) / 15, Math.round(c.b * 15) / 15);
+}
+
+function refine(centers, pixels) {
+  const n = centers.length;
+  for (let pass = 0; pass < 4; pass++) {
+    const sum = new Float32Array(n * 4);
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i] / 255; const g = pixels[i + 1] / 255; const b = pixels[i + 2] / 255;
+      let best = 0; let bestD = Infinity;
+      for (let k = 0; k < n; k++) {
+        const c = centers[k];
+        const d = 2 * (r - c.r) ** 2 + 4 * (g - c.g) ** 2 + 3 * (b - c.b) ** 2;
+        if (d < bestD) { bestD = d; best = k; }
+      }
+      sum[best * 4] += r; sum[best * 4 + 1] += g; sum[best * 4 + 2] += b; sum[best * 4 + 3]++;
+    }
+    for (let k = 0; k < n; k++) {
+      const w = sum[k * 4 + 3];
+      if (w > 0) centers[k].setRGB(sum[k * 4] / w, sum[k * 4 + 1] / w, sum[k * 4 + 2] / w);
+    }
+  }
+  return centers;
+}
+
 const FRAGMENT = /* glsl */ `
   uniform sampler2D tDiffuse;
   uniform sampler2D tLut;
   uniform vec2 uResolution;
   uniform float uPalette;
+  uniform float uDither;
   varying vec2 vUv;
 
   float bayer(vec2 p) {
@@ -91,7 +124,7 @@ const FRAGMENT = /* glsl */ `
     vec3 src = texture2D(tDiffuse, uv).rgb;
     vec2 px = uv * uResolution;
     vec3 c = src;
-    if (uPalette > 0.5) c = lut(src + bayer(floor(px)) * 0.09);
+    if (uPalette > 0.5) c = lut(src + bayer(floor(px)) * uDither);
 
     gl_FragColor = vec4(c, 1.0);
   }
@@ -103,10 +136,31 @@ export class PostPass {
     this.target = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     this.uniforms = {
       tDiffuse: { value: this.target.texture },
-      tLut: { value: buildLut(buildPalette()) },
+      tLut: { value: null },
       uResolution: { value: new THREE.Vector2(1, 1) },
       uPalette: { value: 1 },
+      uDither: { value: DITHER[256] },
     };
+    this.lut256 = buildLut(buildPalette());
+    this.pc98 = PC98_SEED.map((c) => new THREE.Color(c));
+    this.pc98Lut = null;
+    this.pc98At = 0;
+    this.sample = new THREE.WebGLRenderTarget(...PC98_SAMPLE, { depthBuffer: false });
+    this.pixels = new Uint8Array(PC98_SAMPLE[0] * PC98_SAMPLE[1] * 4);
+    const copy = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: this.uniforms.tDiffuse },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = vec4(texture2D(tDiffuse, vUv).rgb, 1.0); }',
+      depthTest: false,
+      depthWrite: false,
+    });
+    const copyQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copy);
+    copyQuad.frustumCulled = false;
+    this.copyScene = new THREE.Scene();
+    this.copyScene.add(copyQuad);
+    let mode = '256';
+    try { mode = localStorage.getItem(STORAGE_KEY) === 'pc98' ? 'pc98' : '256'; } catch {}
+    this.setMode(mode);
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
@@ -129,9 +183,38 @@ export class PostPass {
     this.uniforms.uResolution.value.set(width, lines);
   }
 
+  get mode() {
+    return this._mode;
+  }
+
+  setMode(mode) {
+    this._mode = mode;
+    try { localStorage.setItem(STORAGE_KEY, mode); } catch {}
+    this.uniforms.uDither.value = DITHER[mode];
+    this.pc98At = 0;
+    if (mode === '256') this.uniforms.tLut.value = this.lut256;
+  }
+
+  _updatePc98() {
+    this.renderer.setRenderTarget(this.sample);
+    this.renderer.render(this.copyScene, this.camera);
+    this.renderer.readRenderTargetPixels(this.sample, 0, 0, ...PC98_SAMPLE, this.pixels);
+    refine(this.pc98, this.pixels);
+    const palette = [...PC98_FIXED.map((c) => new THREE.Color(c)), ...this.pc98.map(quantize4)];
+    const lut = buildLut(palette);
+    this.pc98Lut?.dispose();
+    this.pc98Lut = lut;
+    this.uniforms.tLut.value = lut;
+  }
+
   render(scene, camera) {
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(scene, camera);
+    const now = performance.now();
+    if (this._mode === 'pc98' && now - this.pc98At > PC98_EVERY_MS) {
+      this.pc98At = now;
+      this._updatePc98();
+    }
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.scene, this.camera);
   }

@@ -6,6 +6,8 @@ import { OUTER_HALF_M, toLocal } from '../world/geo.js';
 import { makeLabel, setInfo } from '../world/markers.js';
 
 const STATIONS_URL = 'https://de1.api.radio-browser.info/json/stations/bycountry/Japan?hidebroken=true&order=clickcount&reverse=true&limit=60';
+const SIGN_IN_HOSTS = ['gensokyoradio.net', 'miku.fm'];
+const KANTO = new Set(['tokyo', 'kanagawa', 'chiba', 'saitama', 'ibaraki', 'tochigi', 'gunma']);
 const NOW_CHARS = 46;
 const LIST_CHARS = 64;
 const VOL_STEPS = 10;
@@ -20,6 +22,8 @@ let analysed = false;
 let playToken = 0;
 let all = [];
 let local = [];
+let net = [];
+let autoplayed = false;
 let band = 'NET';
 let cursor = 0;
 let playing = null;
@@ -30,7 +34,7 @@ let focusHandler = () => {};
 const markers = new Map();
 const el = {};
 
-const stations = () => (band === 'NET' ? all : local);
+const stations = () => (band === 'NET' ? net : local);
 
 function clean(s) {
   return (s || '').normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim();
@@ -50,7 +54,7 @@ function isPlaying() {
 function renderNow() {
   el.state.textContent = isPlaying() ? '\u25B6' : playing ? '\u2026' : '\u25A0';
   el.state.classList.toggle('on', isPlaying());
-  el.text.textContent = playing ? scroll(clean(playing.name).toUpperCase() || 'JP STATION', NOW_CHARS) : 'NO STATION  \u2191\u2193 SELECT  \u23CE PLAY';
+  el.text.textContent = playing ? scroll(clean(playing.name).toUpperCase() || 'JP STATION', NOW_CHARS) : 'NO STATION';
   if (playing) {
     const tags = clean(playing.tags).split(',').slice(0, 3).join(' ').toUpperCase();
     el.meta.textContent = `${clean(playing.codec) || '---'} ${playing.bitrate || '---'}K  ${tags}`.slice(0, NOW_CHARS + 10);
@@ -58,10 +62,10 @@ function renderNow() {
     el.meta.textContent = ' ';
   }
   const v = muted ? 0 : Math.round(volume * VOL_STEPS);
-  el.volbar.innerHTML = `${'\u2588'.repeat(v)}<span class="empty">${'\u2591'.repeat(VOL_STEPS - v)}</span>`;
+  [...el.volbar.children].forEach((cell, i) => cell.classList.toggle('empty', i >= v));
   el.mute.classList.toggle('lit', muted);
-  el.local.classList.toggle('lit', band === 'LOCAL');
-  el.net.classList.toggle('lit', band === 'NET');
+  el.band.checked = band === 'NET';
+  el.stop.textContent = playing ? '[ \u25a0 STOP ]' : '[ \u25b6 PLAY ]';
   el.count.textContent = stations().length ? `${cursor + 1}/${stations().length}` : band === 'LOCAL' ? 'NONE NEAR TOKYO' : 'SEARCHING';
   el.sim.textContent = isPlaying() ? (analysed ? 'LIVE' : 'SIM') : '';
 }
@@ -309,20 +313,21 @@ async function loadStations() {
     const res = await fetch(STATIONS_URL);
     if (!res.ok) { report('radio', false, `HTTP ${res.status}`); return; }
     report('radio', true);
-    all = (await res.json()).filter((s) => s.url_resolved);
+    all = [...all, ...(await res.json()).filter((s) => s.url_resolved && !SIGN_IN_HOSTS.some((h) => s.url_resolved.includes(h)))];
     for (const s of all) {
-      if (!Number.isFinite(s.geo_lat) || !Number.isFinite(s.geo_long)) continue;
-      const p = toLocal(s.geo_long, s.geo_lat);
-      if (Math.abs(p.x) > OUTER_HALF_M || Math.abs(p.z) > OUTER_HALF_M) continue;
+      if (local.includes(s)) continue;
+      const p = Number.isFinite(s.geo_lat) && Number.isFinite(s.geo_long) ? toLocal(s.geo_long, s.geo_lat) : null;
+      const onMap = p && Math.abs(p.x) <= OUTER_HALF_M && Math.abs(p.z) <= OUTER_HALF_M;
+      if (!onMap && !KANTO.has((s.state || '').trim().toLowerCase())) { net.push(s); continue; }
       local.push(s);
+      if (!onMap) continue;
       const obj = new THREE.Object3D();
       obj.position.set(p.x, 400, p.z);
       obj.add(makeLabel(`♪ ${clean(s.name).toUpperCase().slice(0, 18)}`, {
         className: 'label-radio',
         maxDistance: 90_000,
         onClick: () => {
-          setBand('NET');
-          cursor = all.indexOf(s);
+          select(s);
           play(s);
           focusHandler(obj);
         },
@@ -333,10 +338,18 @@ async function loadStations() {
     }
     renderList();
     render();
+    autoplay();
   } catch (e) {
     report('radio', false, e.message);
     console.warn('[Radio] station fetch failed:', e.message);
   }
+}
+
+function select(s) {
+  band = local.includes(s) ? 'LOCAL' : 'NET';
+  cursor = stations().indexOf(s);
+  renderList();
+  render();
 }
 
 function tune(stream, obj = null) {
@@ -344,10 +357,9 @@ function tune(stream, obj = null) {
   if (!s) {
     s = { ...stream };
     all.push(s);
+    local.unshift(s);
   }
-  band = 'NET';
-  cursor = all.indexOf(s);
-  renderList();
+  select(s);
   if (s !== playing || !isPlaying()) play(s);
   if (obj) focusHandler(obj);
 }
@@ -371,10 +383,12 @@ export function init(ctx) {
   }
   applyVolume();
 
-  for (const id of ['state', 'text', 'meta', 'list', 'volbar', 'mute', 'stop', 'local', 'net', 'count', 'spectrum', 'sim']) el[id] = document.getElementById(`radio-${id}`);
+  for (const id of ['state', 'text', 'meta', 'list', 'volbar', 'mute', 'stop', 'band', 'count', 'spectrum', 'sim']) el[id] = document.getElementById(`radio-${id}`);
   const on = (id, fn) => document.getElementById(`radio-${id}`).addEventListener('click', fn);
   on('local', () => setBand('LOCAL'));
   on('net', () => setBand('NET'));
+  el.band.addEventListener('change', (e) => setBand(e.target.checked ? 'NET' : 'LOCAL'));
+  el.volbar.append(...Array.from({ length: VOL_STEPS }, () => document.createElement('i')));
   on('stop', () => (playing ? stop() : choose()));
   on('mute', () => { muted = !muted; applyVolume(); render(); });
   on('voldown', () => setVolume(volume - 1 / VOL_STEPS));
@@ -405,9 +419,16 @@ export function init(ctx) {
   return group;
 }
 
+function autoplay() {
+  if (autoplayed || !group.visible || playing || !stations().length) return;
+  autoplayed = true;
+  play(stations()[cursor]);
+}
+
 export function setEnabled(on) {
   group.visible = on;
   wspr.setEnabled(on);
+  if (on) autoplay();
 }
 
 export function getCount() {

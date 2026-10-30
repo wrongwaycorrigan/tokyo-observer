@@ -17,8 +17,56 @@ const HEAD = new THREE.Color('#fff6e0');
 const TAIL = new THREE.Color('#ff3030');
 const LAMP = new THREE.Color('#ffb860');
 
+const CAR_VERTEX = /* glsl */ `
+  uniform float uSize;
+  uniform float uNight;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  attribute float aSeed;
+  varying vec3 vColor;
+  varying float vAlpha;
+  varying float vFog;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float d = length(mv.xyz);
+    float day = 1.0 - smoothstep(0.2, 0.7, uNight);
+    float share = mix(1.0, 0.4, smoothstep(2500.0, 25000.0, d));
+    float fade = mix(1.0, step(aSeed, share) * mix(1.0, 0.75, smoothstep(2500.0, 25000.0, d)), day);
+    float shrink = mix(1.0, 1.0 - smoothstep(1500.0, 6000.0, d), day);
+    vColor = color;
+    vAlpha = fade;
+    vFog = smoothstep(uFogNear, uFogFar, d);
+    gl_PointSize = fade > 0.02 ? max(2.0, uSize * shrink) : 0.0;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const CAR_FRAGMENT = /* glsl */ `
+  uniform vec3 uFogColor;
+  varying vec3 vColor;
+  varying float vAlpha;
+  varying float vFog;
+  void main() {
+    if (vAlpha < 0.02) discard;
+    gl_FragColor = vec4(mix(vColor, uFogColor, vFog), vAlpha);
+  }
+`;
+
 function pointMaterial(size) {
-  return new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, depthWrite: false, fog: true });
+  return new THREE.ShaderMaterial({
+    vertexShader: CAR_VERTEX,
+    fragmentShader: CAR_FRAGMENT,
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uSize: { value: size },
+      uNight: SHARED.uNight,
+      uFogColor: SHARED.uFogColor,
+      uFogNear: SHARED.uFogNear,
+      uFogFar: SHARED.uFogFar,
+    },
+  });
 }
 
 export class Roads {
@@ -135,6 +183,7 @@ export class Roads {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CARS * 3), 3));
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(CARS * 3), 3));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(Float32Array.from({ length: CARS }, () => Math.random()), 1));
     this.carMaterial = pointMaterial(3);
     this.traffic = new THREE.Points(g, this.carMaterial);
     this.traffic.frustumCulled = false;

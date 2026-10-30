@@ -17,7 +17,7 @@ import { Terminals } from './world/terminals.js';
 import { Port } from './world/port.js';
 import { loadPlateau } from './world/models.js';
 import { startWarnings, warningsHtml } from './world/warnings.js';
-import { crtEnabled, initCrt, setCrt } from './world/crt.js';
+import { crtMask, initCrt, setCrtMask } from './world/crt.js';
 import { Weather, describe } from './world/weather.js';
 import { Ambience } from './world/audio.js';
 import { AirQuality } from './world/airquality.js';
@@ -286,12 +286,10 @@ async function main() {
     groups.push(['CUSTOM FEEDS', all.filter((s) => !grouped.has(s.id))]);
     $('sources-groups').innerHTML = groups.filter(([, list]) => list.length)
       .map(([title, list]) => `<fieldset class="grp"><legend>${title}</legend>${list.map(row).join('')}</fieldset>`).join('');
-    const count = (st) => all.filter((s) => s.state === st).length;
-    $('src-summary').innerHTML = `<span class="st-ok">&#9679; ${count('ok')} OK</span><span class="st-off">&#183; ${count('off')} OFF</span><span class="st-err">&#10005; ${count('err')}</span>`;
   }
   function openSources() {
-    $('crt-toggle').checked = crtEnabled();
-    $('crt-state').textContent = crtEnabled() ? 'ON' : 'OFF';
+    $('pal-toggle').checked = post.mode === 'pc98';
+    $('mask-toggle').checked = crtMask() === 'trinitron';
     $('src-adsb').value = settings.adsbUrl ?? '';
     $('src-ais').value = settings.aisKey ?? '';
     $('src-feeds').innerHTML = '';
@@ -333,10 +331,20 @@ async function main() {
   updateIndicator();
   $('menu-connect').addEventListener('click', () => ($('sources').classList.contains('hidden') ? openSources() : closeSources()));
   $('sources-close').addEventListener('click', closeSources);
-  $('crt-toggle').addEventListener('change', (e) => {
-    setCrt(e.target.checked);
-    $('crt-state').textContent = e.target.checked ? 'ON' : 'OFF';
-  });
+  const setPalette = (pc98) => {
+    $('pal-toggle').checked = pc98;
+    post.setMode(pc98 ? 'pc98' : '256');
+  };
+  $('pal-toggle').addEventListener('change', (e) => setPalette(e.target.checked));
+  $('pal-256').addEventListener('click', () => setPalette(false));
+  $('pal-98').addEventListener('click', () => setPalette(true));
+  const setMask = (trinitron) => {
+    $('mask-toggle').checked = trinitron;
+    setCrtMask(trinitron ? 'trinitron' : 'slot');
+  };
+  $('mask-toggle').addEventListener('change', (e) => setMask(e.target.checked));
+  $('mask-slot').addEventListener('click', () => setMask(false));
+  $('mask-tri').addEventListener('click', () => setMask(true));
   $('radio-close').addEventListener('click', () => setLayer('radio', false));
   $('src-cancel').addEventListener('click', closeSources);
   $('src-save').addEventListener('click', saveSources);
